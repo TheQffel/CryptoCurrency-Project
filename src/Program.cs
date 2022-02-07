@@ -435,7 +435,7 @@ namespace OneCoin
                         }
                         else
                         {
-                            if (Word.Length < 1)
+                            if (Mnemonics.Length < 1)
                             {
                                 Mnemonics = "a b c d e";
                             }
@@ -468,7 +468,7 @@ namespace OneCoin
                         Console.WriteLine(": " + Account.PrivateKey[..8] + "...");
                         Console.WriteLine("Your public key: " + Account.PublicKey);
                         Console.WriteLine("Your wallet address: " + Wallets.AddressToShort(Account.PublicKey));
-                        Account.LocalName = "one-coin-" + DateTime.Now.ToString().Replace(":", "-").Replace(".", "-").Replace(" ", "-");
+                        Account.LocalName = "one-coin-" + DateTime.Now.ToString().Replace(":", "-").Replace(".", "-").Replace(" ", "-").Replace("/", "-");
 
                         Console.ForegroundColor = ConsoleColor.DarkCyan;
                         Console.Write("Press any key to continue...");

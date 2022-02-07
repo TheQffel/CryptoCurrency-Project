@@ -245,25 +245,39 @@ namespace OneCoin
 
         public static void SyncBlocks()
         {
-            Synchronising = true;
-
-            CurrentHeight = 0;
-
-            while (CurrentHeight < 1)
+            if(!Synchronising)
             {
-                Network.Send(Network.RandomClient(), null, new[] { "Block", "Height", CurrentHeight.ToString() });
-                Thread.Sleep(100);
-            }
-            for (uint i = LastBlockExists() + 1; i < CurrentHeight; i++)
-            {
-                Network.Send(Network.RandomClient(), null, new[] { "Block", "Get", i.ToString() });
-                Thread.Sleep(100);
-            }
-            Task.Run(() => UpdateCache());
+                Synchronising = true;
 
-            Mining.PrepareToMining(GetBlock(CurrentHeight));
+                CurrentHeight = 0;
 
-            Synchronising = false;
+                while (CurrentHeight < 1)
+                {
+                    Network.Send(Network.RandomClient(), null, new[] { "Block", "Height", CurrentHeight.ToString() });
+                    Thread.Sleep(100);
+                }
+                for (uint i = LastBlockExists() + 1; i < CurrentHeight; i++)
+                {
+                    while (!BlockExists(i))
+                    {
+                        Network.Send(Network.RandomClient(), null, new[] { "Block", "Get", i.ToString() });
+                        Thread.Sleep(100);
+                    }
+                    
+                    if(Program.DebugLogging)
+                    {
+                        if(CurrentHeight % 1000 == 0)
+                        {
+                            Console.WriteLine("Current progress: " + i + " / " + CurrentHeight);
+                        }
+                    }
+                }
+                Task.Run(() => UpdateCache());
+
+                Mining.PrepareToMining(GetBlock(CurrentHeight));
+
+                Synchronising = false;
+            }
         }
 
         public static uint LastBlockExists()
