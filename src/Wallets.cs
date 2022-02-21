@@ -212,6 +212,12 @@ namespace OneCoin
             }
             return " ";
         }
+        
+        public static bool CheckAddressCorrect(string Address)
+        {
+            if(Address.Length != 88) { return false; }
+            return AddressToLong(Address).Length > 9 && Hashing.CheckStringFormat(Address, 4, 88, 88);
+        }
 
         public static string[] ListAccounts()
         {

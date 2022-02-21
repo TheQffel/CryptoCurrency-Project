@@ -183,6 +183,7 @@ namespace OneCoin
         +"\n			<div id='statistics'>"
         +"\n				Hashrate And Solutions Chart: <br> <br>"
         +"\n				<canvas id='hashratechart' height='100'></canvas>"
+        +"\n				<span id='refreshinfo'> * You need to mine at least 1 hour to see real hashrate. </span> <br>"
         +"\n				<span id='refreshinfo'> * This statistics will refresh every 15 minutes. </span> <br> <br>"
         +"\n				<br> Your mining address: <span> MINERS+DATA-ADDRESS </span>"
         +"\n				<br> Your current balance: <span> MINERS+DATA-BALANCE </span>"
@@ -195,9 +196,10 @@ namespace OneCoin
         +"\n	<div id='header'>"
         +"\n		<div id='menu'>"
         +"\n			<a href='.' id='mainbutton'>&nbsp;&nbsp;One Coin Mining Statistics&nbsp;&nbsp;</a>"
-        +"\n			<a href='.'>&nbsp;&nbsp;Explorer&nbsp;&nbsp;</a>"
-        +"\n			<a href='http://github.com/TheQffel/OneCoin/releases'>&nbsp;&nbsp;Download&nbsp;&nbsp;</a>"
+        +"\n			<a href='http://discord.gg/SbsFcxFYsg'>&nbsp;&nbsp;Community&nbsp;&nbsp;</a>"
         +"\n			<a href='http://github.com/TheQffel/OneCoin'>&nbsp;&nbsp;Source&nbsp;&nbsp;</a>"
+        +"\n			<a href='http://one-coin.org/'>&nbsp;&nbsp;Website&nbsp;&nbsp;</a>"
+        +"\n			<a href='./miner.json'>&nbsp;&nbsp;Statistics&nbsp;&nbsp;</a>"
         +"\n		</div>"
         +"\n	</div>"
         +"\n	<div id='footer'>"
@@ -246,6 +248,9 @@ namespace OneCoin
             WebpageWithStats = WebpageWithStats.Replace("MINERS+DATA-AVGSOLV", ToReplace[8]);
             
             File.WriteAllText(ToReplace[0], WebpageWithStats);
+            string JsonData = "{ 'labels': " + ToReplace[1] + ", 'hashrate': " + ToReplace[2] + ", 'solutions': " + ToReplace[3] + " }";
+            ToReplace[0] = ToReplace[0].Replace("index.html", "miner.json");
+            File.WriteAllText(ToReplace[0], JsonData.Replace("'", "\""));
             
             if(Open)
             {

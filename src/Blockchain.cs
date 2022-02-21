@@ -101,91 +101,76 @@ namespace OneCoin
         
         public static void DatabaseSync()
         {
-            Thread.Sleep(10000);
+            Database.Connect(DatabaseHost, DatabaseUser, DatabasePass, DatabaseDb);
+            Database.SpecialCommand("SET @@sql_mode = '';"); // To prevent error on empty strings.
             
-            MySqlConnection Connection = new("server=" + DatabaseHost + ";userid=" + DatabaseUser + ";password=" + DatabasePass + ";database=" + DatabaseDb);
-            Connection.Open();
-            
-            byte BlocksDelay = 10;
-            uint LatestStoredBlock = 0;
-            
-            MySqlCommand FirstCommand = new("SET @@sql_mode = '';");
-            FirstCommand.Connection = Connection;
-            FirstCommand.ExecuteNonQuery();
-                
-            FirstCommand = new("SELECT COUNT(BlockHeight) FROM blocks;");
-            FirstCommand.Connection = Connection;
-            using MySqlDataReader Reader = FirstCommand.ExecuteReader();
-
-            while (Reader.Read())
+            string Tmp = Database.Get("blocks", "BlockHeight", "", "BlockHeight DESC", 1)[0][0];
+            if(Tmp.Length < 1)
             {
-                LatestStoredBlock = Reader.GetUInt32(0);
+                Tmp = "0";
+                Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash", "'0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0'");
             }
-            Reader.Close();
+            uint LatestStoredBlock = uint.Parse(Tmp);
             
             while(DatabaseHost.Length > 1)
             {
                 for(int i = 0; i < AllKnownAddresses.Count; i++)
                 {
-                    string[] UserData = new string[5];
-                    UserData[0] = AllKnownAddresses[i];
-                    UserData[1] = Wallets.GetBalance(UserData[0]).ToString();
-                    UserData[3] = "1";
-                    UserData[2] = Wallets.GetName(UserData[0]);
-                    UserData[4] = Wallets.GetAvatar(UserData[0]);
+                    string[] Temp = (Wallets.GetName(AllKnownAddresses[i]) + "|1").Split("|");
+                    Temp = new [] { Wallets.GetBalance(AllKnownAddresses[i]).ToString(), Temp[0], Temp[1], Wallets.GetAvatar(AllKnownAddresses[i]) };
                     
-                    if(UserData[2].Contains("|"))
+                    if(Database.Set("onecoin", "Balance='" + Temp[0] + "', Nickname='" + Temp[1] + "', Tag='" + Temp[2] + "', Avatar='" + Temp[3] + "'", "Address='" + AllKnownAddresses[i] + "'") < 1)
                     {
-                        UserData[3] = UserData[2].Split("|")[1];
-                        UserData[2] = UserData[2].Split("|")[0];
+                        Database.Add("onecoin", "Address, Balance, Nickname, Tag, Avatar", "'" + AllKnownAddresses[i] + "', '" + Temp[0] + "', '" + Temp[1] + "', '" + Temp[2] + "', '" + Temp[3] + "'");
                     }
                     
-                    MySqlCommand Command = new("INSERT INTO onecoin (Address, Balance, Nickname, Tag, Avatar) VALUES ('" + UserData[0] + "', '" + UserData[1] + "', '" + UserData[2] + "', '" + UserData[3] + "', '" + UserData[4] + "') ON DUPLICATE KEY UPDATE Balance='" + UserData[1] + "', Nickname='" + UserData[2] + "', Tag='" + UserData[3] + "', Avatar='" + UserData[4] + "';");
-                    Command.Connection = Connection;
-                    
-                    Command.ExecuteNonQuery();
-                    
-                    if(TempAvatarsPath.Length > 1 && UserData[4].Length > 9)
+                    if(TempAvatarsPath.Length > 1 && Temp[3].Length > 9)
                     {
-                        Media.TextToImage(UserData[4]).Save(TempAvatarsPath + "/" + UserData[0] + ".png", ImageFormat.Png);
+                        Media.TextToImage(Temp[3]).Save(TempAvatarsPath + "/" + AllKnownAddresses[i] + ".png", ImageFormat.Png);
                     }
                     if(TempQrCodesPath.Length > 1)
                     {
-                        Bitmap QrCode = Wallets.GenerateQrCode(UserData[0]);
-                        new Bitmap(QrCode, QrCode.Width*4, QrCode.Height*4).Save(TempQrCodesPath + "/" + UserData[0] + ".png", ImageFormat.Png);
+                        Bitmap QrCode = Wallets.GenerateQrCode(AllKnownAddresses[i]);
+                        new Bitmap(QrCode, QrCode.Width*4, QrCode.Height*4).Save(TempQrCodesPath + "/" + AllKnownAddresses[i] + ".png", ImageFormat.Png);
                     }
                     
                     Thread.Sleep(10000);
                 }
 
-                for (uint i = LatestStoredBlock + 1; i < CurrentHeight - BlocksDelay; i++)
+                for (uint i = LatestStoredBlock + 1; i < CurrentHeight; i++)
                 {
                     Block ToInsert = GetBlock(i);
                     
-                    MySqlCommand Command = new("INSERT INTO blocks (BlockHeight, PreviousHash, CurrentHash, Timestamp, Difficulty, Message, ExtraData) VALUES ('" + ToInsert.BlockHeight + "', '" + ToInsert.PreviousHash + "', '" + ToInsert.CurrentHash + "', '" + ToInsert.Timestamp + "', '" + ToInsert.Difficulty + "', '" + ToInsert.ExtraData.Split('|')[1] + "', '" + ToInsert.ExtraData.Split('|')[2] + "');");
-                    Command.Connection = Connection;
+                    string Hash = Database.Get("blocks", "CurrentHash", "BlockHeight='" + (i-1) + "'")[0][0];
                     
-                    Command.ExecuteNonQuery();
-                    
-                    if(TempBlocksPath.Length > 1)
+                    if(Hash == ToInsert.PreviousHash )
                     {
-                        Media.TextToImage(ToInsert.ExtraData.Split('|')[0]).Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
-                    }
-
-                    for (int j = 0; j < ToInsert.Transactions.Length; j++)
-                    {
-                        Thread.Sleep(1000);
+                        Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash, Timestamp, Difficulty, Message, ExtraData", "'" + ToInsert.BlockHeight + "', '" + ToInsert.PreviousHash + "', '" + ToInsert.CurrentHash + "', '" + ToInsert.Timestamp + "', '" + ToInsert.Difficulty + "', '" + ToInsert.ExtraData.Split('|')[1] + "', '" + ToInsert.ExtraData.Split('|')[2] + "'");
                         
-                        MySqlCommand NextCommand = new("INSERT INTO transactions (BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature) VALUES ('" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Signature + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "');");
-                        NextCommand.Connection = Connection;
-                    
-                        NextCommand.ExecuteNonQuery();
+                        if(TempBlocksPath.Length > 1)
+                        {
+                            Media.TextToImage(ToInsert.ExtraData.Split('|')[0]).Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
+                        }
+
+                        for (int j = 0; j < ToInsert.Transactions.Length; j++)
+                        {
+                            Thread.Sleep(1000);
+                        
+                            Database.Add("transactions", "BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature", "'" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Signature + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "'");
+                        }
+                    }
+                    else
+                    {
+                        Database.Del("blocks", "BlockHeight='" + (i-1) + "'");
+                        Database.Del("transactions", "BlockHeight='" + (i-1) + "'");
+                        
+                        i -= 2;
                     }
                     
                     Thread.Sleep(10000);
                 }
             }
-            Connection.Close();
+            Database.Disconnect();
         }
         
         public static bool VerifyCache()
@@ -243,9 +228,9 @@ namespace OneCoin
             return BlocksInMemory.ContainsKey(Height) || File.Exists(Settings.BlockchainPath + Height + ".dat");
         }
 
-        public static void SyncBlocks()
+        public static void SyncBlocks(bool Force = false)
         {
-            if(!Synchronising)
+            if(!Synchronising || Force)
             {
                 Synchronising = true;
 
@@ -263,7 +248,6 @@ namespace OneCoin
                         Network.Send(Network.RandomClient(), null, new[] { "Block", "Get", i.ToString() });
                         Thread.Sleep(100);
                     }
-                    
                     if(Program.DebugLogging)
                     {
                         if(CurrentHeight % 1000 == 0)
@@ -349,6 +333,12 @@ namespace OneCoin
         {
             Block OneBlock = new();
             OneBlock.BlockHeight = Height;
+            
+            if(Height < 1)
+            {
+                OneBlock.CurrentHash = "1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0";
+                return OneBlock;
+            }
 
             if (File.Exists(Settings.BlockchainPath + Height + ".dat") && File.Exists(Settings.TransactionsPath + Height + ".dat"))
             {

@@ -125,7 +125,6 @@ namespace OneCoin
                     ToBeMined[i].PreviousHash = CurrentBlock.CurrentHash;
                     if (CustomDifficulty > 1) { ToBeMined[i].Difficulty = CustomDifficulty; }
                     else { ToBeMined[i].Difficulty = NextDifficulty; }
-                    if (ToBeMined[i].BlockHeight < 10) { ToBeMined[i].Difficulty = (byte)ToBeMined[i].BlockHeight; } // #DOUSUNIECIA#
                 }
                 MinerReward.From = "OneCoin";
                 MinerReward.To = MiningAddress;
@@ -332,6 +331,7 @@ namespace OneCoin
                         Console.WriteLine(Memories[0] + " ≈ " + Memories[1] + " ≈ " + Memories[2] + " ≈ " + Memories[3]);
                         Console.WriteLine("You are mining to address: " + MiningAddress[..10] + "..." + MiningAddress[^10..]);
                         Console.WriteLine("Current balance of this address: " + Balance);
+                        Console.WriteLine("");
                     }
                     
                     Statistics.Update();

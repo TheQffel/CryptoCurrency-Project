@@ -80,19 +80,20 @@ namespace OneCoin
 
             long HistoricalHeight = BlockHeight;
             string HistoryHash = CurrentHash;
-            
+
             for (int i = 0; i < HistoryHash.Length; i++)
             {
-                HistoricalHeight -= (Hashing.HashEncodingIndex(HistoryHash[i]) + 1 + i) * Hashing.Primes[Difficulty + i];
+                HistoricalHeight -= ((long)Hashing.HashEncodingIndex(HistoryHash[i]) + 1 + i) * Hashing.Primes[Difficulty + i];
+                
                 if (HistoricalHeight > 0)
                 {
                     Block HistoricalBlock = Blockchain.GetBlock((uint)HistoricalHeight);
 
-                    long TransactionNumber = BlockHeight + Hashing.SumHash(CurrentHash);
+                    long TransactionNumber = BlockHeight + (long)Hashing.SumHash(CurrentHash);
 
                     for (int j = 0; j < HistoricalBlock.CurrentHash.Length; j++)
                     {
-                        TransactionNumber += Hashing.HashEncodingIndex(HistoricalBlock.CurrentHash[j]) * (j + 1);
+                        TransactionNumber += (long)Hashing.HashEncodingIndex(HistoricalBlock.CurrentHash[j]) * (j + 1);
                     }
                     TransactionNumber %= HistoricalBlock.Transactions.Length;
                     
@@ -169,7 +170,7 @@ namespace OneCoin
 
             if (MinerReward.Hash() != Transactions[0].Hash()) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong miner reward hash."); } }
             if (Transactions[0].From != "OneCoin") { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong miner from data."); } }
-            if (!Hashing.CheckStringFormat(Transactions[0].To, 4, 88, 88)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong miner to data."); } }
+            if (!Wallets.CheckAddressCorrect(Transactions[0].To)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong miner to data."); } }
 
             ulong PreviousTransactionTimestamp = 1;
 

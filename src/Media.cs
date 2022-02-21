@@ -14,12 +14,17 @@ namespace OneCoin
 
             if(Files.Length > 0)
             {
-                string[] FileName = Files[Random.Next(0, Files.Length)].Replace("\\", "/").Split("/");
-                Bitmap BitmapImage = (Bitmap)Image.FromFile(Settings.ImagesPath + FileName[^1]);
-                FileName[0] = ImageToText(BitmapImage);
-                if(FileName[0].Length < 4000)
+                string FileName = Path.GetFileName(Files[Random.Next(0, Files.Length)]);
+                Bitmap BitmapImage = (Bitmap)Image.FromFile(Settings.ImagesPath + FileName);
+                FileName = ImageToText(BitmapImage);
+                if(ImageDataCorrect(FileName))
                 {
-                    return FileName[0];
+                    Console.WriteLine(FileName.Length);
+                    
+                    if(FileName.Length < 4000)
+                    {
+                        return FileName;
+                    }
                 }
             }
 
@@ -48,11 +53,14 @@ namespace OneCoin
 
             if (Files.Length > 0)
             {
-                string[] FileName = Files[Random.Next(0, Files.Length)].Replace("\\", "/").Split("/");
-                string Message = File.ReadAllLines(Settings.MessagesPath + FileName[^1])[0];
+                string FileName = Path.GetFileName(Files[Random.Next(0, Files.Length)]);
+                string Message = File.ReadAllLines(Settings.MessagesPath + FileName)[0];
                 if(Message.Length < 500)
                 {
-                    return Message;
+                    if(Hashing.CheckStringFormat(Message, 5, 0, int.MaxValue))
+                    {
+                        return Message;
+                    }
                 }
             }
             return "One Coin";
@@ -145,11 +153,11 @@ namespace OneCoin
 
             int Dimensions = (int)Math.Sqrt(LastIndex);
             
-            if(Dimensions*Dimensions != LastIndex)
+            if(Dimensions*Dimensions != LastIndex || Dimensions < 1)
             {
                 return null;
             }
-
+            
             Bitmap Final = new(Dimensions, Dimensions);
 
             for (int i = 0; i < Dimensions; i++)

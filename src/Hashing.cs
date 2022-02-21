@@ -31,11 +31,11 @@ namespace OneCoin
             string Result = "";
             for (int i = 0; i < Encoded.Length; i++)
             {
-                for (int j = 0; j < 32; j++)
+                for (byte j = 0; j < 32; j++)
                 {
                     if (Encoded[i].ToString() == HashEncoding[j])
                     {
-                        Result += HashEncoding[j];
+                        Result += Convert.ToString(j, 2).PadLeft(5, '0');
                     }
                 }
             }

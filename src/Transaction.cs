@@ -56,8 +56,8 @@ namespace OneCoin
             if(Message == null) { Message = ""; }
             
             if (!Hashing.CheckStringFormat(Message, 5, 0, 64)) { Correct = false; }
-            if (!Hashing.CheckStringFormat(From, 4, 88, 88)) { Correct = false; }
-            if (!Hashing.CheckStringFormat(To, 4, 88, 88))
+            if (!Wallets.CheckAddressCorrect(From)) { Correct = false; }
+            if (!Wallets.CheckAddressCorrect(To))
             {
                 if (Hashing.CheckStringFormat(To, 5, 4, 24))
                 {

@@ -316,7 +316,8 @@ namespace OneCoin
                     Thread.Sleep(250);
                     
                     Console.WriteLine("Synchronising blocks...");
-                    Blockchain.SyncBlocks();
+                    Task.Run(() => Blockchain.SyncBlocks(true));
+                    Thread.Sleep(1000);
                     
                     Settings.Load();
                     Discord.StartService();
@@ -447,7 +448,7 @@ namespace OneCoin
                             break;
                         }
                     }
-                    if (Wallets.AddressToShort(Account.PublicKey).Contains(" ") || Wallets.AddressToShort(Account.PublicKey).Contains("|"))
+                    if (Wallets.CheckAddressCorrect(Wallets.AddressToShort(Account.PublicKey)))
                     {
                         Console.ForegroundColor = ConsoleColor.DarkRed;
                         Console.WriteLine("Your address is not valid - it contains illegal characters (space or separator).");
@@ -468,7 +469,7 @@ namespace OneCoin
                         Console.WriteLine(": " + Account.PrivateKey[..8] + "...");
                         Console.WriteLine("Your public key: " + Account.PublicKey);
                         Console.WriteLine("Your wallet address: " + Wallets.AddressToShort(Account.PublicKey));
-                        Account.LocalName = "one-coin-" + DateTime.Now.ToString().Replace(":", "-").Replace(".", "-").Replace(" ", "-").Replace("/", "-");
+                        Account.LocalName = "one-coin-" + DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss");
 
                         Console.ForegroundColor = ConsoleColor.DarkCyan;
                         Console.Write("Press any key to continue...");
@@ -481,12 +482,13 @@ namespace OneCoin
                 {
                     if(Account.ReloadMnemonics())
                     {
-                        while (Wallets.AddressToShort(Account.PublicKey).Contains("|") || Wallets.AddressToShort(Account.PublicKey).Contains(" "))
+                        Account.PublicKey = null;
+                        while (!Wallets.CheckAddressCorrect(Wallets.AddressToShort(Account.PublicKey)))
                         {
                             Account.Mnemonics = Account.GenerateMnemonic();
                             Account.GenerateKeyPair(Account.Mnemonics);
                         }
-                        Account.LocalName = "one-coin-" + DateTime.Now.ToString().Replace(":", "-").Replace(".", "-").Replace("/", "-").Replace("\\", "-").Replace(" ", "-");
+                        Account.LocalName = "one-coin-" + DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss");
                         Console.ForegroundColor = ConsoleColor.DarkGreen;
                         Console.Write("Account successfully generated! ");
                         Console.ForegroundColor = ConsoleColor.White;

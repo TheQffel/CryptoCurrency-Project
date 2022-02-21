@@ -135,9 +135,11 @@ namespace OneCoin
 
         public static void Recieve(TcpClient Client, bool Listening)
         {
+            string Peer = ((IPEndPoint)Client.Client.RemoteEndPoint).Address.MapToIPv4().ToString();
+            
             if(Program.DebugLogging)
             {
-                Console.WriteLine("Connected: " + ((IPEndPoint)Client.Client.RemoteEndPoint).Address.MapToIPv4());
+                Console.WriteLine("Connected: " + Peer);
             }
             
             try
@@ -194,7 +196,7 @@ namespace OneCoin
             
             if(Program.DebugLogging)
             {
-                Console.WriteLine("Disconnected: " + ((IPEndPoint)Client.Client.RemoteEndPoint).Address.MapToIPv4());
+                Console.WriteLine("Disconnected: " + Peer);
             }
         }
 
@@ -331,7 +333,7 @@ namespace OneCoin
                         {
                             for (int i = 2; i < Messages.Length; i++)
                             {
-                                Task.Run(() => Discover(Messages[i].Split(":")[0], int.Parse(Messages[i].Split(":")[1])));
+                                //Task.Run(() => Discover(Messages[i].Split(":")[0], int.Parse(Messages[i].Split(":")[1])));
                                 Thread.Sleep(100);
                             }
                         }
@@ -474,7 +476,7 @@ namespace OneCoin
                                         }
                                         else
                                         {
-                                            Blockchain.SyncBlocks();
+                                            Task.Run(() => Blockchain.SyncBlocks());
                                         }
                                     }
                                 }
