@@ -1,18 +1,21 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace OneCoin
 {
     class Settings
     {
-        public static string WordsPath = "./words/";
-        public static string ImagesPath = "./images/";
-        public static string MessagesPath = "./texts/";
-        public static string BlockchainPath = "./blockchain/";
-        public static string TransactionsPath = "./transactions/";
-        public static string SettingsPath = "./settings/";
-        public static string WalletsPath = "./wallets/";
-        public static string ServicesPath = "./services/";
-        public static string ExtrasPath = "./extras/";
+        public static string AppPath = AppDomain.CurrentDomain.BaseDirectory;
+        
+        public static string WordsPath = AppPath + "/words/";
+        public static string ImagesPath = AppPath + "/images/";
+        public static string MessagesPath = AppPath + "/texts/";
+        public static string BlockchainPath = AppPath + "/blockchain/";
+        public static string TransactionsPath = AppPath + "/transactions/";
+        public static string SettingsPath = AppPath + "/settings/";
+        public static string WalletsPath = AppPath + "/wallets/";
+        public static string ServicesPath = AppPath + "/services/";
+        public static string ExtrasPath = AppPath + "/extras/";
 
         public static uint MemoryLimit = uint.MaxValue;
         public static sbyte ConsoleSize = 0;

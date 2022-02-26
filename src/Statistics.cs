@@ -213,7 +213,7 @@ namespace OneCoin
             string WebpageWithStats = Website;
             string[] ToReplace = new string[9];
             
-            ToReplace[0] = Directory.GetCurrentDirectory() + "/index.html";
+            ToReplace[0] = Settings.AppPath + "/index.html";
             
             ToReplace[1] = "'NOW'";
             int X = (DateTime.Now.Second + 60 * DateTime.Now.Minute) * 1000;

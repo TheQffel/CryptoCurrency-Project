@@ -19,8 +19,6 @@ namespace OneCoin
                 FileName = ImageToText(BitmapImage);
                 if(ImageDataCorrect(FileName))
                 {
-                    Console.WriteLine(FileName.Length);
-                    
                     if(FileName.Length < 4000)
                     {
                         return FileName;

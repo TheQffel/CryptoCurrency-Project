@@ -387,7 +387,7 @@ namespace OneCoin
                             if (Blockchain.BlockExists(uint.Parse(Messages[2])))
                             {
                                 Block OldBlock = Blockchain.GetBlock(uint.Parse(Messages[2]));
-                                string[] BlockData = new string[OldBlock.Transactions.Length * 6 + 9];
+                                string[] BlockData = new string[OldBlock.Transactions.Length * 7 + 9];
 
                                 BlockData[0] = "Block";
                                 BlockData[1] = "Set";
@@ -401,12 +401,13 @@ namespace OneCoin
 
                                 for (int i = 0; i < OldBlock.Transactions.Length; i++)
                                 {
-                                    BlockData[9 + i * 6] = OldBlock.Transactions[i].From;
-                                    BlockData[10 + i * 6] = OldBlock.Transactions[i].To;
-                                    BlockData[11 + i * 6] = OldBlock.Transactions[i].Amount.ToString();
-                                    BlockData[12 + i * 6] = OldBlock.Transactions[i].Fee.ToString();
-                                    BlockData[13 + i * 6] = OldBlock.Transactions[i].Timestamp.ToString();
-                                    BlockData[14 + i * 6] = OldBlock.Transactions[i].Signature;
+                                    BlockData[9 + i * 7] = OldBlock.Transactions[i].From;
+                                    BlockData[10 + i * 7] = OldBlock.Transactions[i].To;
+                                    BlockData[11 + i * 7] = OldBlock.Transactions[i].Amount.ToString();
+                                    BlockData[12 + i * 7] = OldBlock.Transactions[i].Fee.ToString();
+                                    BlockData[13 + i * 7] = OldBlock.Transactions[i].Timestamp.ToString();
+                                    BlockData[14 + i * 7] = OldBlock.Transactions[i].Message;
+                                    BlockData[15 + i * 7] = OldBlock.Transactions[i].Signature;
                                 }
                                 Send(TcpClient, UdpClient, BlockData);
                             }
@@ -434,12 +435,13 @@ namespace OneCoin
                                             for (int i = 0; i < NewBlock.Transactions.Length; i++)
                                             {
                                                 NewBlock.Transactions[i] = new();
-                                                NewBlock.Transactions[i].From = Messages[9 + i * 6];
-                                                NewBlock.Transactions[i].To = Messages[10 + i * 6];
-                                                NewBlock.Transactions[i].Amount = BigInteger.Parse(Messages[11 + i * 6]);
-                                                NewBlock.Transactions[i].Fee = ulong.Parse(Messages[12 + i * 6]);
-                                                NewBlock.Transactions[i].Timestamp = ulong.Parse(Messages[13 + i * 6]);
-                                                NewBlock.Transactions[i].Signature = Messages[14 + i * 6];
+                                                NewBlock.Transactions[i].From = Messages[9 + i * 7];
+                                                NewBlock.Transactions[i].To = Messages[10 + i * 7];
+                                                NewBlock.Transactions[i].Amount = BigInteger.Parse(Messages[11 + i * 7]);
+                                                NewBlock.Transactions[i].Fee = ulong.Parse(Messages[12 + i * 7]);
+                                                NewBlock.Transactions[i].Timestamp = ulong.Parse(Messages[13 + i * 7]);
+                                                NewBlock.Transactions[i].Message = Messages[14 + i * 7];
+                                                NewBlock.Transactions[i].Signature = Messages[15 + i * 7];
                                             }
 
                                             bool LatestBlock = NewBlock.BlockHeight == Blockchain.CurrentHeight + 1;
@@ -487,7 +489,7 @@ namespace OneCoin
                 }
                 case "transaction":
                 {
-                    if (Messages.Length > 5)
+                    if (Messages.Length > 7)
                     {
                         bool A = Messages[2].Length <= 25 && Blockchain.CurrentHeight >= 1000; // Unlock nicknames at 1k
                         bool B = Messages[2].Length >= 99 && Blockchain.CurrentHeight >= 10000; // Unlock avatars at 10k
@@ -501,7 +503,8 @@ namespace OneCoin
                             Transaction.Amount = ulong.Parse(Messages[3]);
                             Transaction.Fee = ulong.Parse(Messages[4]);
                             Transaction.Timestamp = ulong.Parse(Messages[5]);
-                            Transaction.Signature = Messages[6];
+                            Transaction.Message = Messages[6];
+                            Transaction.Signature = Messages[7];
                             
                             while(Transaction.Timestamp > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
                             {
@@ -514,7 +517,7 @@ namespace OneCoin
                                 {
                                     if(!Mining.PendingTransactions.Exists(Pending => Pending.Signature == Transaction.Signature))
                                     {
-                                        if(Transaction.CheckTransactionCorrect(Wallets.GetBalance(Transaction.From)))
+                                        if(Transaction.CheckTransactionCorrect(Wallets.GetBalance(Transaction.From), Blockchain.CurrentHeight))
                                         {
                                             if(!Wallets.CheckTransactionAlreadyIncluded(Transaction))
                                             {

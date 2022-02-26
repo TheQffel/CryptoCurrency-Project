@@ -5,7 +5,6 @@ using Org.BouncyCastle.Security;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -115,11 +114,38 @@ namespace OneCoin
             return "";
         }
         
-        public static uint GetLastUsedBlock(string Address)
+        public static uint GetLastUsedBlock(string Address, uint BlockHeight = 0)
         {
             Blockchain.CheckIfExistsInCache(Address, Blockchain.CurrentHeight - 1);
             
-            return Blockchain.LastUseCache[Address];
+            if(BlockHeight == 0)
+            {
+                return Blockchain.LastUseCache[Address];
+            }
+            
+            uint LastUse = 0;
+
+            for (uint i = 1; i <= BlockHeight; i++)
+            {
+                Block OneCoinBlock = Blockchain.GetBlock(i);
+
+                for (int j = 0; j < OneCoinBlock.Transactions.Length; j++)
+                {
+                    if (OneCoinBlock.Transactions[j].From == Address)
+                    {
+                        LastUse = i;
+                    }
+
+                    if (OneCoinBlock.Transactions[j].To == Address)
+                    {
+                        if(LastUse == 0)
+                        {
+                            LastUse = i;
+                        }
+                    }
+                }
+            }
+            return LastUse;
         }
 
         public static bool CheckTransactionAlreadyIncluded(Transaction Transaction, uint BlockHeight = 0)
@@ -217,11 +243,6 @@ namespace OneCoin
         {
             if(Address.Length != 88) { return false; }
             return AddressToLong(Address).Length > 9 && Hashing.CheckStringFormat(Address, 4, 88, 88);
-        }
-
-        public static string[] ListAccounts()
-        {
-            return Directory.GetFiles(Settings.WalletsPath);
         }
 
         public static void PrintQrCode(string Address)

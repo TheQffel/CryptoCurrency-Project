@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace OneCoin
 {
@@ -176,7 +174,7 @@ namespace OneCoin
 
             Dictionary<string, byte> UserTransactions = new();
             Dictionary<string, BigInteger> UserBalance = new();
-            Dictionary<string, bool> NicknameAvatarChange = new();
+            Dictionary<string, bool> SpecialTransaction = new();
             
             if(Correct)
             {
@@ -191,11 +189,11 @@ namespace OneCoin
                     {
                         UserTransactions[Transactions[i].From] = 0;
                         UserBalance[Transactions[i].From] = Wallets.GetBalance(Transactions[i].From, BlockHeight - 1);
-                        NicknameAvatarChange[Transactions[i].From] = false;
+                        SpecialTransaction[Transactions[i].From] = false;
                     }
                     UserTransactions[Transactions[i].From]++;
                     if (UserTransactions[Transactions[i].From] > Difficulty) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Too much transactions."); } }
-                    if (!Transactions[i].CheckTransactionCorrect(UserBalance[Transactions[i].From])) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong transaction."); } }
+                    if (!Transactions[i].CheckTransactionCorrect(UserBalance[Transactions[i].From], BlockHeight)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong transaction."); } }
                     UserBalance[Transactions[i].From] -= Transactions[i].Amount;
 
                     if (Transactions[i].Timestamp + 1000000 < Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
@@ -203,8 +201,9 @@ namespace OneCoin
                     if (Transactions[i].Timestamp > Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
                     PreviousTransactionTimestamp = Transactions[i].Timestamp;
                     
-                    if(Transactions[i].To.Length != 88) { NicknameAvatarChange[Transactions[i].From] = true;  }
-                    if(NicknameAvatarChange[Transactions[i].From] && UserTransactions[Transactions[i].From] > 1) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Account data change with transactions."); } }
+                    if(Transactions[i].To.Length != 88) { SpecialTransaction[Transactions[i].From] = true;  }
+                    if(Transactions[i].Signature.Length == 205) { SpecialTransaction[Transactions[i].From] = true;  }
+                    if(SpecialTransaction[Transactions[i].From] && UserTransactions[Transactions[i].From] > 1) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Account data change with transactions."); } }
 
                     if (Wallets.CheckTransactionAlreadyIncluded(Transactions[i], BlockHeight-1)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Already included."); } }
                 }

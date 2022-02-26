@@ -1,14 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.IO.Ports;
 using System.Net;
 using System.Net.Sockets;
-using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -19,8 +17,6 @@ namespace OneCoin
         public static bool CheckUpdates = true;
         public static bool MainMenuLoop = true;
         public static bool DebugLogging = false;
-
-        static string ArgumentsText = "";
 
         static void Main(string[] Args)
         {
@@ -45,19 +41,18 @@ namespace OneCoin
                     Console.WriteLine("You can run app, but any image dependent operations will probably crash app.");
                     Console.WriteLine("To fix this error, please install \"libgdiplus\" on your system.");
                     Console.ForegroundColor = ConsoleColor.DarkGreen;
-                    Console.WriteLine("  Debian / Ubuntu: sudo apt-get install libgdiplus  ");
-                    Console.WriteLine("  RedHat / Fedora: sudo yum install libgdiplus  ");
-                    Console.WriteLine("  Arch / Manjaro: sudo pacman -S libgdiplus  ");
+                    Console.WriteLine("  Debian / Ubuntu:  sudo apt-get install libgdiplus  ");
+                    Console.WriteLine("  RedHat / Fedora:  sudo yum install libgdiplus      ");
+                    Console.WriteLine("  Arch / Manjaro:   sudo pacman -S libgdiplus        ");
                     Console.ForegroundColor = ConsoleColor.DarkCyan;
                     Console.WriteLine("Close app and install missing library. Alternatively, press any key to continue...");
+                    Console.ForegroundColor = ConsoleColor.White;
                     Console.ReadKey();
                 }
             }
             
             for (int i = 0; i < Args.Length; i++)
             {
-                ArgumentsText += " " + Args[i];
-
                 string[] Arguments = Args[i].Split(":");
                 if (Arguments[0][0] == '-')
                 {
@@ -72,7 +67,6 @@ namespace OneCoin
                             Console.WriteLine("-debug");
                             Console.WriteLine("-skipupdate");
                             Console.WriteLine("-forceupdate");
-                            Console.WriteLine("-skipmenu:[accountname]");
                             Console.WriteLine("-mining:[address]:(pool)");
                             Console.WriteLine("-database:[host]:[user]:[pass]:[db]:(avatarsdir):(qrcodesdir):(blocksdir)");
                             Console.WriteLine("-generatesignature:[key]:[message]");
@@ -80,6 +74,7 @@ namespace OneCoin
                             Console.WriteLine("-generatemnemonics");
                             Console.WriteLine("-getkeyfrommnemonics:[mnemonic1]:(mnemonic2):(mnemonic3)...");
                             Console.WriteLine("-getaddressfromkey:[key]");
+                            Console.WriteLine("-sendpacket:[ipaddress]:[message1]:(message2):(message3)...");
                             Console.WriteLine("  Info:");
                             Console.WriteLine("Words in [] are required parameters.");
                             Console.WriteLine("Words in () are optional parameters.");
@@ -88,9 +83,7 @@ namespace OneCoin
                         case "v": case "version":
                         {
                             MainMenuLoop = false;
-                            Console.WriteLine("                        ");
-                            Console.WriteLine("   One Coin v. 1.22.0   ");
-                            Console.WriteLine("                        ");
+                            Console.WriteLine(File.ReadAllText(Settings.AppPath + "/version.txt"));
                             break;
                         }
                         case "debug":
@@ -105,38 +98,8 @@ namespace OneCoin
                         }
                         case "forceupdate":
                         {
-                            File.WriteAllText("version.txt", "0");
+                            File.WriteAllText("version.txt", "0\nStarted with -forceupdate!");
                             CheckUpdates = true;
-                            break;
-                        }
-                        case "skipmenu":
-                        {
-                            MainMenuLoop = false;
-                            if (Arguments.Length > 1)
-                            {
-                                if (CheckUpdates)
-                                {
-                                    CheckForUpdates();
-                                }
-                                else
-                                {
-                                    Task.Run(() => Network.ListenForConnections());
-                                    Task.Run(() => Network.ListenForPackets());
-                                    Task.Run(() => Network.SearchVerifiedNodes());
-                                    
-                                    Account.LocalName = Arguments[1];
-                                    Account.Load();
-                                    Account.Menu();
-                                    WelcomeScreen();
-                                    Console.WriteLine("Thank you for using One Coin! Hope to see you soon :)");
-                                    
-                                    Network.FlushConnections();
-                                }
-                            }
-                            else
-                            {
-                                Console.WriteLine("To few arguments, use \"OneCoin -help\", to get all possible commands with arguments...");
-                            }
                             break;
                         }
                         case "mining":
@@ -261,8 +224,7 @@ namespace OneCoin
                             MainMenuLoop = false;
                             if (Arguments.Length > 1)
                             {
-                                Account.Mnemonics = new string[Arguments.Length-1];
-                                for (int j = 1; j < Arguments.Length; j++) { Account.Mnemonics[j-1] = Arguments[j]; }
+                                Account.Mnemonics = Arguments.Skip(1).ToArray();
                                 Account.GenerateKeyPair(Account.Mnemonics);
                                 
                                 if(Wallets.AddressToShort(Account.PublicKey).Contains(" ") || Wallets.AddressToShort(Account.PublicKey).Contains("|"))
@@ -293,17 +255,40 @@ namespace OneCoin
                             }
                             break;
                         }
+                        case "sendpacket":
+                        {
+                            MainMenuLoop = false;
+                            if (Arguments.Length > 2)
+                            {
+                                DebugLogging = true;
+                                UdpClient Node = new();
+                                Node.Connect(IPAddress.Parse(Arguments[1]), 10101);
+                                Network.Send(null, Node, Arguments.Skip(2).ToArray());
+                            }
+                            else
+                            {
+                                Console.WriteLine("To few arguments, use \"OneCoin -help\", to get all possible commands with arguments...");
+                            }
+                            break;
+                        }
+                        default:
+                        {
+                            Console.WriteLine("Unknown argument: " + Arguments[0]);
+                            MainMenuLoop = false;
+                            break;
+                        }
                     }
                 }
             }
             if(MainMenuLoop)
             {
-                if(false)//if (CheckUpdates) // #TOBEREMOVED#
+                if(!Console.IsOutputRedirected) // Prevent "double-click" in linux gui instead of launching from terminal.
                 {
-                    CheckForUpdates();
-                }
-                else
-                {
+                    if (CheckUpdates)
+                    {
+                        CheckForUpdates();
+                    }
+                    
                     Console.WriteLine("Starting node, please wait...");
                     Settings.CheckPaths();
                     
@@ -328,6 +313,12 @@ namespace OneCoin
                     Blockchain.DatabaseHost = "";
                     Thread.Sleep(5000);
                 }
+                else
+                {
+                    File.WriteAllText("Run_Me_From_Terminal", "Alternatively, create onecoin.desktop file.");
+                    Thread.Sleep(100000);
+                    File.Delete("Run_Me_From_Terminal");
+                }
             }
 
             Console.BackgroundColor = Back;
@@ -336,39 +327,93 @@ namespace OneCoin
 
         static void CheckForUpdates()
         {
-            ProcessStartInfo StartInfo = new();
-            if (OperatingSystem.IsLinux())
+            string[] AppFiles = Directory.GetFiles(Settings.AppPath);
+
+            for (int i = 0; i < AppFiles.Length; i++)
             {
-                if (RuntimeInformation.ProcessArchitecture.ToString().ToUpper()[0] == 'X')
+                if(AppFiles[i][^7..] == ".backup")
                 {
-                    Console.WriteLine("Detected system: Linux");
-                    StartInfo = new("Updater", "version.txt http://raw.githubusercontent.com/TheQffel/OneCoin/main/version.txt http://github.com/TheQffel/OneCoin/releases/latest/download/onecoin-release-linux.zip OneCoin -skipupdate" + ArgumentsText);
+                    File.Delete(AppFiles[i]);
+                }
+            }
+            
+            string ReleaseName = "";
+            string FileName = Settings.AppPath + "/OneCoin";
+            
+            if (OperatingSystem.IsWindows()) { ReleaseName = "Windows"; FileName += ".exe"; }
+            if (OperatingSystem.IsLinux()) { ReleaseName = "Linux"; }
+            if (RuntimeInformation.ProcessArchitecture.ToString().ToUpper()[0] != 'X') ReleaseName = "Arm";
+            if (OperatingSystem.IsMacOS()) { ReleaseName = "Macos"; }
+            
+            if(ReleaseName.Length > 1)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkBlue;
+                Console.WriteLine("Detected System: " + ReleaseName);
+                ReleaseName = "cli-" + ReleaseName.ToLower() + ".zip";
+                
+                if(!File.Exists(Settings.AppPath + "/version.txt"))
+                {
+                    File.WriteAllText(Settings.AppPath + "/version.txt", "Unknown\nVersion cannot be determined!\nUpdate is recommended...");
+                }
+                
+                WebClient WebClient = new WebClient();
+                WebClient.Headers.Add("User-Agent", "Application");
+                string OldVersion = File.ReadAllText(Settings.AppPath + "/version.txt");
+                string NewVersion = OldVersion;
+                string[] VersionData = WebClient.DownloadString("http://api.github.com/repos/TheQffel/OneCoin/releases/latest").Split("\"");
+                for (int i = 0; i < VersionData.Length; i++)
+                {
+                    if(VersionData[i] == "tag_name")
+                    {
+                        NewVersion = VersionData[i+2];
+                        break;
+                    }
+                }
+               
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                Console.WriteLine("Your version is: " + OldVersion);
+                Console.WriteLine("Latest version is: " + NewVersion);
+
+                if(OldVersion == NewVersion)
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkGreen;
+                    Console.WriteLine("Your app is up to date!");
                 }
                 else
                 {
-                    Console.WriteLine("Detected system: Arm");
-                    StartInfo = new("Updater", "version.txt http://raw.githubusercontent.com/TheQffel/OneCoin/main/version.txt http://github.com/TheQffel/OneCoin/releases/latest/download/onecoin-release-arm.zip OneCoin -skipupdate" + ArgumentsText);
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
+                    Console.WriteLine("New version available!");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    
+                    Console.WriteLine("Downloading update...");
+                    WebClient.DownloadFile("http://github.com/TheQffel/OneCoin/releases/latest/download/" + ReleaseName, Settings.AppPath + "/Update.zip");
+
+                    Console.WriteLine("Extracting update...");
+                    for (int i = 0; i < AppFiles.Length; i++)
+                    {
+                        if(AppFiles[i][^4..] == ".dll" || AppFiles[i][^3..] == ".so" || AppFiles[i][^6..] == ".dylib")
+                        {
+                            File.Move(AppFiles[i], AppFiles[i] + ".backup");
+                        }
+                    }
+                    File.Move(FileName, FileName + ".backup");
+                    FileName = Settings.AppPath + "/Update.zip";
+                    Console.WriteLine("");
+                    ZipFile.ExtractToDirectory(FileName, Settings.AppPath, true);
+                    File.Move(FileName, FileName + ".backup");
+                    File.WriteAllText(Settings.AppPath + "/version.txt", NewVersion);
+
+                    Console.WriteLine("Update done, new version will be launched next time you run this app!");
                 }
             }
-            if (OperatingSystem.IsWindows())
+            else
             {
-                if (RuntimeInformation.ProcessArchitecture.ToString().ToUpper()[0] == 'X')
-                {
-                    Console.WriteLine("Detected system: Windows");
-                    StartInfo = new("Updater.exe", "version.txt http://raw.githubusercontent.com/TheQffel/OneCoin/main/version.txt http://github.com/TheQffel/OneCoin/releases/latest/download/onecoin-release-windows.zip OneCoin.exe -skipupdate" + ArgumentsText);
-                }
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                Console.WriteLine("Your system is not supported for auto updates!");
+                Console.ForegroundColor = ConsoleColor.DarkBlue;
+                Console.WriteLine("Check github every few days for newer version.");
             }
-            if (OperatingSystem.IsMacOS())
-            {
-                if (RuntimeInformation.ProcessArchitecture.ToString().ToUpper()[0] == 'X')
-                {
-                    Console.WriteLine("Detected system: Macos");
-                    StartInfo = new("Updater", "version.txt http://raw.githubusercontent.com/TheQffel/OneCoin/main/version.txt http://github.com/TheQffel/OneCoin/releases/latest/download/onecoin-release-macos.zip OneCoin -skipupdate" + ArgumentsText);
-                }
-            }
-            StartInfo.CreateNoWindow = false;
-            StartInfo.UseShellExecute = false;
-            Process.Start(StartInfo);
+            Thread.Sleep(1000);
         }
 
         static void MainMenu()
@@ -388,7 +433,7 @@ namespace OneCoin
                 }
                 else if (UserChoice == 1)
                 {
-                    string[] Accounts = Wallets.ListAccounts();
+                    string[] Accounts = Directory.GetFiles(Settings.WalletsPath);
                     for (int i = 0; i < Accounts.Length; i++)
                     {
                         Accounts[i] = Accounts[i].Replace("\\", "/").Split("/")[^1].Replace(".dat", "");

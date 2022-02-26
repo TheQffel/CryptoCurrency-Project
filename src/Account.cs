@@ -8,8 +8,10 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Numerics;
 using System.Threading.Tasks;
+using Org.BouncyCastle.Math.EC;
 
 namespace OneCoin
 {
@@ -25,40 +27,66 @@ namespace OneCoin
 
         public static bool ReloadMnemonics()
         {
-            try
-            {
-                MnemonicsA = File.ReadAllLines(Settings.WordsPath + "a.txt");
-                MnemonicsB = File.ReadAllLines(Settings.WordsPath + "b.txt");
-                MnemonicsC = File.ReadAllLines(Settings.WordsPath + "c.txt");
-                MnemonicsD = File.ReadAllLines(Settings.WordsPath + "d.txt");
-                MnemonicsE = File.ReadAllLines(Settings.WordsPath + "e.txt");
-                MnemonicsF = File.ReadAllLines(Settings.WordsPath + "f.txt");
-                MnemonicsG = File.ReadAllLines(Settings.WordsPath + "g.txt");
-                MnemonicsH = File.ReadAllLines(Settings.WordsPath + "h.txt");
-                MnemonicsI = File.ReadAllLines(Settings.WordsPath + "i.txt");
-                MnemonicsJ = File.ReadAllLines(Settings.WordsPath + "j.txt");
-                MnemonicsK = File.ReadAllLines(Settings.WordsPath + "k.txt");
-                MnemonicsL = File.ReadAllLines(Settings.WordsPath + "l.txt");
-                MnemonicsM = File.ReadAllLines(Settings.WordsPath + "m.txt");
-                MnemonicsN = File.ReadAllLines(Settings.WordsPath + "n.txt");
-                MnemonicsO = File.ReadAllLines(Settings.WordsPath + "o.txt");
-                MnemonicsP = File.ReadAllLines(Settings.WordsPath + "p.txt");
-                MnemonicsQ = File.ReadAllLines(Settings.WordsPath + "q.txt");
-                MnemonicsR = File.ReadAllLines(Settings.WordsPath + "r.txt");
-                MnemonicsS = File.ReadAllLines(Settings.WordsPath + "s.txt");
-                MnemonicsT = File.ReadAllLines(Settings.WordsPath + "t.txt");
-                MnemonicsU = File.ReadAllLines(Settings.WordsPath + "u.txt");
-                MnemonicsV = File.ReadAllLines(Settings.WordsPath + "v.txt");
-                MnemonicsW = File.ReadAllLines(Settings.WordsPath + "w.txt");
-                MnemonicsX = File.ReadAllLines(Settings.WordsPath + "x.txt");
-                MnemonicsY = File.ReadAllLines(Settings.WordsPath + "y.txt");
-                MnemonicsZ = File.ReadAllLines(Settings.WordsPath + "z.txt");
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
+            bool WarningPrinted = false;
+            WebClient WebClient = new WebClient();
+            WebClient.Headers.Add("User-Agent", "Application");
+            
+            if(!File.Exists(Settings.WordsPath + "a.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/a.txt", Settings.WordsPath + "a.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "b.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/b.txt", Settings.WordsPath + "b.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "c.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/c.txt", Settings.WordsPath + "c.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "d.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/d.txt", Settings.WordsPath + "d.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "e.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/e.txt", Settings.WordsPath + "e.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "f.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/f.txt", Settings.WordsPath + "f.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "g.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/g.txt", Settings.WordsPath + "g.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "h.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/h.txt", Settings.WordsPath + "h.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "i.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/i.txt", Settings.WordsPath + "i.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "j.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/j.txt", Settings.WordsPath + "j.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "k.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/k.txt", Settings.WordsPath + "k.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "l.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/l.txt", Settings.WordsPath + "l.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "m.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/m.txt", Settings.WordsPath + "m.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "n.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/n.txt", Settings.WordsPath + "n.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "o.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/o.txt", Settings.WordsPath + "o.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "p.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/p.txt", Settings.WordsPath + "p.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "q.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/q.txt", Settings.WordsPath + "q.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "r.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/r.txt", Settings.WordsPath + "r.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "s.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/s.txt", Settings.WordsPath + "s.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "t.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/t.txt", Settings.WordsPath + "t.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "u.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/u.txt", Settings.WordsPath + "u.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "v.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/v.txt", Settings.WordsPath + "v.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "w.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/w.txt", Settings.WordsPath + "w.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "x.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/x.txt", Settings.WordsPath + "x.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "y.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/y.txt", Settings.WordsPath + "y.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(!File.Exists(Settings.WordsPath + "z.txt")) { WebClient.DownloadFile("http://raw.githubusercontent.com/TheQffel/OneCoin/main/words/z.txt", Settings.WordsPath + "z.txt"); if(!WarningPrinted) { WarningPrinted = true; Console.WriteLine("Missing mnemonic words file(s), downloading from source..."); } }
+            if(WarningPrinted) { Console.WriteLine("Downloaded all missing mnemonic words files."); }
+            
+            MnemonicsA = File.ReadAllLines(Settings.WordsPath + "a.txt");
+            MnemonicsB = File.ReadAllLines(Settings.WordsPath + "b.txt");
+            MnemonicsC = File.ReadAllLines(Settings.WordsPath + "c.txt");
+            MnemonicsD = File.ReadAllLines(Settings.WordsPath + "d.txt");
+            MnemonicsE = File.ReadAllLines(Settings.WordsPath + "e.txt");
+            MnemonicsF = File.ReadAllLines(Settings.WordsPath + "f.txt");
+            MnemonicsG = File.ReadAllLines(Settings.WordsPath + "g.txt");
+            MnemonicsH = File.ReadAllLines(Settings.WordsPath + "h.txt");
+            MnemonicsI = File.ReadAllLines(Settings.WordsPath + "i.txt");
+            MnemonicsJ = File.ReadAllLines(Settings.WordsPath + "j.txt");
+            MnemonicsK = File.ReadAllLines(Settings.WordsPath + "k.txt");
+            MnemonicsL = File.ReadAllLines(Settings.WordsPath + "l.txt");
+            MnemonicsM = File.ReadAllLines(Settings.WordsPath + "m.txt");
+            MnemonicsN = File.ReadAllLines(Settings.WordsPath + "n.txt");
+            MnemonicsO = File.ReadAllLines(Settings.WordsPath + "o.txt");
+            MnemonicsP = File.ReadAllLines(Settings.WordsPath + "p.txt");
+            MnemonicsQ = File.ReadAllLines(Settings.WordsPath + "q.txt");
+            MnemonicsR = File.ReadAllLines(Settings.WordsPath + "r.txt");
+            MnemonicsS = File.ReadAllLines(Settings.WordsPath + "s.txt");
+            MnemonicsT = File.ReadAllLines(Settings.WordsPath + "t.txt");
+            MnemonicsU = File.ReadAllLines(Settings.WordsPath + "u.txt");
+            MnemonicsV = File.ReadAllLines(Settings.WordsPath + "v.txt");
+            MnemonicsW = File.ReadAllLines(Settings.WordsPath + "w.txt");
+            MnemonicsX = File.ReadAllLines(Settings.WordsPath + "x.txt");
+            MnemonicsY = File.ReadAllLines(Settings.WordsPath + "y.txt");
+            MnemonicsZ = File.ReadAllLines(Settings.WordsPath + "z.txt");
+            
+            return true;
         }
 
         public static string[] GenerateMnemonic()
@@ -153,14 +181,14 @@ namespace OneCoin
             PublicKey = Hashing.BytesToHex(Public.Q.GetEncoded());
         }
 
-        public static string GetPublicKeyFromPrivateKey(string privateKey)
+        public static string GetPublicKeyFromPrivateKey(string PrivateKey)
         {
-            var curve = SecNamedCurves.GetByName("secp256k1");
-            var domain = new ECDomainParameters(curve.Curve, curve.G, curve.N, curve.H);
-            var d = new Org.BouncyCastle.Math.BigInteger(privateKey, 16);
-            var q = domain.G.Multiply(d);
-            var publicKey = new ECPublicKeyParameters(q, domain);
-            return Hashing.BytesToHex(publicKey.Q.GetEncoded());
+            X9ECParameters Curve = SecNamedCurves.GetByName("secp256k1");
+            ECDomainParameters Domain = new ECDomainParameters(Curve.Curve, Curve.G, Curve.N, Curve.H);
+            Org.BouncyCastle.Math.BigInteger Number = new Org.BouncyCastle.Math.BigInteger(PrivateKey, 16);
+            ECPoint Point = Domain.G.Multiply(Number);
+            ECPublicKeyParameters PublicKey = new ECPublicKeyParameters(Point, Domain);
+            return Hashing.BytesToHex(PublicKey.Q.GetEncoded());
         }
 
         public static void Load()
@@ -186,7 +214,7 @@ namespace OneCoin
             }
         }
 
-        public static void Transaction(string AddressTo, BigInteger Amount)
+        public static void Transaction(string AddressTo, BigInteger Amount, string Message = "")
         {
             Transaction NewTransaction = new();
             NewTransaction.From = Wallets.AddressToShort(PublicKey);
@@ -194,9 +222,10 @@ namespace OneCoin
             NewTransaction.Amount = Amount;
             NewTransaction.Fee = 0;
             NewTransaction.Timestamp = (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
+            NewTransaction.Message = Message;
             NewTransaction.GenerateSignature(PrivateKey);
             
-            Network.Broadcast(new[] { "Transaction", NewTransaction.From, NewTransaction.To, NewTransaction.Amount.ToString(), NewTransaction.Fee.ToString(), NewTransaction.Timestamp.ToString(), NewTransaction.Signature });
+            Network.Broadcast(new[] { "Transaction", NewTransaction.From, NewTransaction.To, NewTransaction.Amount.ToString(), NewTransaction.Fee.ToString(), NewTransaction.Timestamp.ToString(), NewTransaction.Message, NewTransaction.Signature });
         }
 
         public static void Menu()

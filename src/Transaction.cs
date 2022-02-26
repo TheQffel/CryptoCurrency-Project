@@ -46,7 +46,7 @@ namespace OneCoin
             Signature = Wallets.GenerateSignature(Key, ToString());
         }
         
-        public bool CheckTransactionCorrect(BigInteger Balance)
+        public bool CheckTransactionCorrect(BigInteger Balance, uint Height)
         {
             bool Correct = From != To;
             if(Fee > 1000000000000000000) { Correct = false; }
@@ -79,7 +79,9 @@ namespace OneCoin
             }
             else
             {
-                int Difficulty = 250 - (int)(Wallets.GetLastUsedBlock(From) / 100000);
+                if(Hashing.TqHash(ToString()) != Signature) { Correct = false; }
+                uint Inactivity = Height + 1 - Wallets.GetLastUsedBlock(From, Height);
+                int Difficulty = 250 - (int)(Inactivity / 100000);
                 if(Difficulty < 1) { Difficulty = 1; }
                 if(!Mining.CheckSolution(Signature, (byte)Difficulty)) { Correct = false; }
             }

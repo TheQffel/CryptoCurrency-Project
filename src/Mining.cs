@@ -156,7 +156,7 @@ namespace OneCoin
                     
                     Dictionary<string, byte> UserTransactions = new();
                     Dictionary<string, BigInteger> UserBalance = new();
-                    Dictionary<string, bool> NicknameAvatarChange = new();
+                    Dictionary<string, bool> SpecialTransaction = new();
 
                     for (int i = 0; i < PendingTransactions.Count; i++)
                     {
@@ -166,27 +166,27 @@ namespace OneCoin
                         {
                             UserTransactions[PendingTransactions[i].From] = 0;
                             UserBalance[PendingTransactions[i].From] = Wallets.GetBalance(PendingTransactions[i].From);
-                            NicknameAvatarChange[PendingTransactions[i].From] = false;
+                            SpecialTransaction[PendingTransactions[i].From] = false;
                         }
                         
                         if(PendingTransactions[i].Timestamp + 750000 > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
                         {
                             if(!Wallets.CheckTransactionAlreadyIncluded(PendingTransactions[i]))
                             {
-                                if(PendingTransactions[i].CheckTransactionCorrect(UserBalance[PendingTransactions[i].From]))
+                                if(PendingTransactions[i].CheckTransactionCorrect(UserBalance[PendingTransactions[i].From], Blockchain.CurrentHeight))
                                 {
                                     if (UserTransactions[PendingTransactions[i].From] < Blockchain.GetBlock(Blockchain.CurrentHeight).Difficulty)
                                     {
-                                        if(PendingTransactions[i].To.Length == 88 && !NicknameAvatarChange[PendingTransactions[i].From])
+                                        if(PendingTransactions[i].To.Length == 88 && !SpecialTransaction[PendingTransactions[i].From])
                                         {
                                             UserBalance[PendingTransactions[i].From] -= PendingTransactions[i].Amount;
                                             UserTransactions[PendingTransactions[i].From]++;
                                             Transactions.Add(PendingTransactions[i]);
                                         }
-                                        if(PendingTransactions[i].To.Length != 88 && UserTransactions[PendingTransactions[i].From] == 0)
+                                        if((PendingTransactions[i].Signature.Length == 205 || PendingTransactions[i].To.Length != 88) && UserTransactions[PendingTransactions[i].From] == 0)
                                         {
                                             UserBalance[PendingTransactions[i].From] -= PendingTransactions[i].Amount;
-                                            NicknameAvatarChange[PendingTransactions[i].From] = true;
+                                            SpecialTransaction[PendingTransactions[i].From] = true;
                                             UserTransactions[PendingTransactions[i].From]++;
                                             Transactions.Add(PendingTransactions[i]);
                                         }
@@ -290,7 +290,7 @@ namespace OneCoin
 
                     ValidHashes++;
                     SolutionsStats[CurrentHour]++;
-                    string[] BlockData = new string[ToBeChecked.Transactions.Length * 6 + 9];
+                    string[] BlockData = new string[ToBeChecked.Transactions.Length * 7 + 9];
 
                     BlockData[0] = "Block";
                     BlockData[1] = "Set";
@@ -304,12 +304,13 @@ namespace OneCoin
 
                     for (int i = 0; i < ToBeChecked.Transactions.Length; i++)
                     {
-                        BlockData[9 + i * 6] = ToBeChecked.Transactions[i].From;
-                        BlockData[10 + i * 6] = ToBeChecked.Transactions[i].To;
-                        BlockData[11 + i * 6] = ToBeChecked.Transactions[i].Amount.ToString();
-                        BlockData[12 + i * 6] = ToBeChecked.Transactions[i].Fee.ToString();
-                        BlockData[13 + i * 6] = ToBeChecked.Transactions[i].Timestamp.ToString();
-                        BlockData[14 + i * 6] = ToBeChecked.Transactions[i].Signature;
+                        BlockData[9 + i * 7] = ToBeChecked.Transactions[i].From;
+                        BlockData[10 + i * 7] = ToBeChecked.Transactions[i].To;
+                        BlockData[11 + i * 7] = ToBeChecked.Transactions[i].Amount.ToString();
+                        BlockData[12 + i * 7] = ToBeChecked.Transactions[i].Fee.ToString();
+                        BlockData[13 + i * 7] = ToBeChecked.Transactions[i].Timestamp.ToString();
+                        BlockData[14 + i * 7] = ToBeChecked.Transactions[i].Message;
+                        BlockData[15 + i * 7] = ToBeChecked.Transactions[i].Signature;
                     }
                     
                     Network.Broadcast(BlockData);

@@ -6,7 +6,6 @@ using System.IO;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
-using MySqlConnector;
 
 namespace OneCoin
 {
@@ -101,76 +100,85 @@ namespace OneCoin
         
         public static void DatabaseSync()
         {
-            Database.Connect(DatabaseHost, DatabaseUser, DatabasePass, DatabaseDb);
-            Database.SpecialCommand("SET @@sql_mode = '';"); // To prevent error on empty strings.
-            
-            string Tmp = Database.Get("blocks", "BlockHeight", "", "BlockHeight DESC", 1)[0][0];
-            if(Tmp.Length < 1)
-            {
-                Tmp = "0";
-                Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash", "'0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0'");
-            }
-            uint LatestStoredBlock = uint.Parse(Tmp);
-            
-            while(DatabaseHost.Length > 1)
-            {
-                for(int i = 0; i < AllKnownAddresses.Count; i++)
+            try
+            { 
+                Database.Connect(DatabaseHost, DatabaseUser, DatabasePass, DatabaseDb);
+                Database.SpecialCommand("SET @@sql_mode = '';"); // To prevent error on empty strings.
+                
+                string Tmp = Database.Get("blocks", "BlockHeight", "", "BlockHeight DESC", 1)[0][0];
+                if(Tmp.Length < 1)
                 {
-                    string[] Temp = (Wallets.GetName(AllKnownAddresses[i]) + "|1").Split("|");
-                    Temp = new [] { Wallets.GetBalance(AllKnownAddresses[i]).ToString(), Temp[0], Temp[1], Wallets.GetAvatar(AllKnownAddresses[i]) };
-                    
-                    if(Database.Set("onecoin", "Balance='" + Temp[0] + "', Nickname='" + Temp[1] + "', Tag='" + Temp[2] + "', Avatar='" + Temp[3] + "'", "Address='" + AllKnownAddresses[i] + "'") < 1)
-                    {
-                        Database.Add("onecoin", "Address, Balance, Nickname, Tag, Avatar", "'" + AllKnownAddresses[i] + "', '" + Temp[0] + "', '" + Temp[1] + "', '" + Temp[2] + "', '" + Temp[3] + "'");
-                    }
-                    
-                    if(TempAvatarsPath.Length > 1 && Temp[3].Length > 9)
-                    {
-                        Media.TextToImage(Temp[3]).Save(TempAvatarsPath + "/" + AllKnownAddresses[i] + ".png", ImageFormat.Png);
-                    }
-                    if(TempQrCodesPath.Length > 1)
-                    {
-                        Bitmap QrCode = Wallets.GenerateQrCode(AllKnownAddresses[i]);
-                        new Bitmap(QrCode, QrCode.Width*4, QrCode.Height*4).Save(TempQrCodesPath + "/" + AllKnownAddresses[i] + ".png", ImageFormat.Png);
-                    }
-                    
-                    Thread.Sleep(10000);
+                    Tmp = "0";
+                    Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash", "'0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0'");
                 }
-
-                for (uint i = LatestStoredBlock + 1; i < CurrentHeight; i++)
+                uint LatestStoredBlock = uint.Parse(Tmp);
+                
+                Thread.Sleep(10000);
+                
+                while(DatabaseHost.Length > 1)
                 {
-                    Block ToInsert = GetBlock(i);
-                    
-                    string Hash = Database.Get("blocks", "CurrentHash", "BlockHeight='" + (i-1) + "'")[0][0];
-                    
-                    if(Hash == ToInsert.PreviousHash )
+                    for(int i = 0; i < AllKnownAddresses.Count; i++)
                     {
-                        Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash, Timestamp, Difficulty, Message, ExtraData", "'" + ToInsert.BlockHeight + "', '" + ToInsert.PreviousHash + "', '" + ToInsert.CurrentHash + "', '" + ToInsert.Timestamp + "', '" + ToInsert.Difficulty + "', '" + ToInsert.ExtraData.Split('|')[1] + "', '" + ToInsert.ExtraData.Split('|')[2] + "'");
+                        string[] Temp = (Wallets.GetName(AllKnownAddresses[i]) + "|1").Split("|");
+                        Temp = new [] { Wallets.GetBalance(AllKnownAddresses[i]).ToString(), Temp[0], Temp[1], Wallets.GetAvatar(AllKnownAddresses[i]) };
                         
-                        if(TempBlocksPath.Length > 1)
+                        if(Database.Set("onecoin", "Balance='" + Temp[0] + "', Nickname='" + Temp[1] + "', Tag='" + Temp[2] + "', Avatar='" + Temp[3] + "'", "Address='" + AllKnownAddresses[i] + "'") < 1)
                         {
-                            Media.TextToImage(ToInsert.ExtraData.Split('|')[0]).Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
+                            Database.Add("onecoin", "Address, Balance, Nickname, Tag, Avatar", "'" + AllKnownAddresses[i] + "', '" + Temp[0] + "', '" + Temp[1] + "', '" + Temp[2] + "', '" + Temp[3] + "'");
                         }
+                        
+                        if(TempAvatarsPath.Length > 1 && Temp[3].Length > 9)
+                        {
+                            Media.TextToImage(Temp[3]).Save(TempAvatarsPath + "/" + AllKnownAddresses[i] + ".png", ImageFormat.Png);
+                        }
+                        if(TempQrCodesPath.Length > 1)
+                        {
+                            Bitmap QrCode = Wallets.GenerateQrCode(AllKnownAddresses[i]);
+                            new Bitmap(QrCode, QrCode.Width*4, QrCode.Height*4).Save(TempQrCodesPath + "/" + AllKnownAddresses[i] + ".png", ImageFormat.Png);
+                        }
+                        
+                        Thread.Sleep(10000);
+                    }
 
-                        for (int j = 0; j < ToInsert.Transactions.Length; j++)
-                        {
-                            Thread.Sleep(1000);
-                        
-                            Database.Add("transactions", "BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature", "'" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Signature + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "'");
-                        }
-                    }
-                    else
+                    for (uint i = LatestStoredBlock + 1; i < CurrentHeight; i++)
                     {
-                        Database.Del("blocks", "BlockHeight='" + (i-1) + "'");
-                        Database.Del("transactions", "BlockHeight='" + (i-1) + "'");
+                        Block ToInsert = GetBlock(i);
                         
-                        i -= 2;
+                        string Hash = Database.Get("blocks", "CurrentHash", "BlockHeight='" + (i-1) + "'")[0][0];
+                        
+                        if(Hash == ToInsert.PreviousHash )
+                        {
+                            Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash, Timestamp, Difficulty, Message, ExtraData", "'" + ToInsert.BlockHeight + "', '" + ToInsert.PreviousHash + "', '" + ToInsert.CurrentHash + "', '" + ToInsert.Timestamp + "', '" + ToInsert.Difficulty + "', '" + ToInsert.ExtraData.Split('|')[1] + "', '" + ToInsert.ExtraData.Split('|')[2] + "'");
+                            
+                            if(TempBlocksPath.Length > 1)
+                            {
+                                Media.TextToImage(ToInsert.ExtraData.Split('|')[0]).Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
+                            }
+
+                            for (int j = 0; j < ToInsert.Transactions.Length; j++)
+                            {
+                                Thread.Sleep(1000);
+                            
+                                Database.Add("transactions", "BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature", "'" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Signature + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "'");
+                            }
+                        }
+                        else
+                        {
+                            Database.Del("blocks", "BlockHeight='" + (i-1) + "'");
+                            Database.Del("transactions", "BlockHeight='" + (i-1) + "'");
+                            
+                            i -= 2;
+                        }
+                        
+                        Thread.Sleep(10000);
                     }
-                    
-                    Thread.Sleep(10000);
                 }
+                Database.Disconnect();
             }
-            Database.Disconnect();
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
         }
         
         public static bool VerifyCache()

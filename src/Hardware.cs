@@ -2,7 +2,6 @@
 using System.IO;
 using System.IO.Ports;
 using System.Numerics;
-using System.Threading;
 
 namespace OneCoin
 {
