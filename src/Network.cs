@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -206,25 +207,39 @@ namespace OneCoin
             {
                 if (Ip.Length > 5)
                 {
-                    TcpClient New = new();
-                    New.Connect(IPAddress.Parse(Ip), Port);
-                        
-                    Recieve(New, true);
+                    IPAddress Address = IPAddress.Parse(Ip);
+                    
+                    if(!IPAddress.IsLoopback(Address))
+                    {
+                        TcpClient New = new();
+                        New.Connect(Address, Port);
+                            
+                        Recieve(New, true);
+                    }
                 }
             }
-            catch (Exception e)
+            catch (Exception Ex)
             {
                 if(Program.DebugLogging)
                 {
-                    Console.WriteLine(e);
+                    Console.WriteLine(Ex);
                 }
             }
         }
 
         public static void SearchVerifiedNodes()
         {
-            WebClient WebClient = new();
-            VerifiedNodes = WebClient.DownloadString("http://one-coin.org/verifiednodes.txt").Split("\n");
+            try
+            { 
+                new WebClient().DownloadFile("http://one-coin.org/verifiednodes.txt", Settings.AppPath + "/nodes.txt");
+            }
+            catch (Exception Ex)
+            {
+                if(Program.DebugLogging) { Console.WriteLine("Cannot refresh nodes list, using local file."); }
+            }
+            
+            VerifiedNodes = File.ReadAllLines(Settings.AppPath + "/nodes.txt");
+
             for (int i = 0; i < VerifiedNodes.Length; i++)
             {
                 string[] FullNode = VerifiedNodes[i].Split(":");
@@ -280,7 +295,7 @@ namespace OneCoin
             }
         }
 
-        public static string ConnectedNodes()
+        public static byte ConnectedNodes()
         {
             byte Nodes = 0;
 
@@ -295,7 +310,7 @@ namespace OneCoin
                 }
             }
 
-            return Nodes + " / 256";
+            return Nodes;
         }
 
         public static void Action(TcpClient TcpClient, UdpClient UdpClient, string[] Messages)
@@ -333,7 +348,7 @@ namespace OneCoin
                         {
                             for (int i = 2; i < Messages.Length; i++)
                             {
-                                //Task.Run(() => Discover(Messages[i].Split(":")[0], int.Parse(Messages[i].Split(":")[1])));
+                                Task.Run(() => Discover(Messages[i].Split(":")[0], int.Parse(Messages[i].Split(":")[1])));
                                 Thread.Sleep(100);
                             }
                         }
@@ -494,8 +509,9 @@ namespace OneCoin
                         bool A = Messages[2].Length <= 25 && Blockchain.CurrentHeight >= 1000; // Unlock nicknames at 1k
                         bool B = Messages[2].Length >= 99 && Blockchain.CurrentHeight >= 10000; // Unlock avatars at 10k
                         bool C = Messages[2].Length == 88 && Blockchain.CurrentHeight >= 100000; // Unlock transactions at 100k
+                        bool D = Messages[4] == "0" || Blockchain.CurrentHeight >= 1000000; // No fee for transactions to 1M
                         
-                        if(A || B || C)
+                        if((A || B || C) && D)
                         {
                             Transaction Transaction = new();
                             Transaction.From = Messages[1];

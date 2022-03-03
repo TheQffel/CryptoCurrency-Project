@@ -423,7 +423,7 @@ namespace OneCoin
             while (MainMenuLoop)
             {
                 WelcomeScreen();
-                int UserChoice = DisplayMenu(new[] { "Exit to desktop", "Load account from disk", "Recover account from mnemonic seed", "Generate new account randomly", "Connect to hardware wallet", "Mine to address", "Explore blockchain" });
+                int UserChoice = DisplayMenu(new[] { "Exit to desktop", "Load account from disk", "Recover account from mnemonic seed", "Generate new account randomly", "Connect to hardware wallet", "Mine to address", "Explore blockchain", "Connect to specific node" });
 
                 WelcomeScreen();
                 if (UserChoice == 0)
@@ -626,6 +626,25 @@ namespace OneCoin
                 else if (UserChoice == 6)
                 {
                     Blockchain.Explore();
+                }
+                else if (UserChoice == 7)
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkCyan;
+                    Console.WriteLine("Total connected nodes: " + Network.ConnectedNodes() + "/256");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.Write("Type address (in format IP:PORT): ");
+                    string[] Address = (Console.ReadLine() + ":10101").Split(":");
+                    Task.Run(() => Network.Discover(Address[0], int.Parse(Address[1])));
+                    Console.ForegroundColor = ConsoleColor.DarkGreen;
+                    Console.WriteLine("Your node will connect to " + Address[0] + ":" + Address[1]);
+                    Console.ForegroundColor = ConsoleColor.DarkYellow;
+                    Console.WriteLine("(Only if this address is correct full node)");
+                    Thread.Sleep(2500);
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
+                    Console.WriteLine("Total connected nodes: " + Network.ConnectedNodes() + "/256");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.Write("Press any key to continue...");
+                    Console.ReadKey();
                 }
             }
             

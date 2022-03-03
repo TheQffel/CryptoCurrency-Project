@@ -52,10 +52,10 @@ namespace OneCoin
             if(Fee > 1000000000000000000) { Correct = false; }
             if(Fee >= Amount) { Correct = false; }
             if (Amount < 1) { Correct = false; }
-            if (Balance < Amount) { Correct = false; }
+            if (Balance < Amount + Fee) { Correct = false; }
             if(Message == null) { Message = ""; }
             
-            if (!Hashing.CheckStringFormat(Message, 5, 0, 64)) { Correct = false; }
+            if (!Hashing.CheckStringFormat(Message, 5, 0, 256)) { Correct = false; }
             if (!Wallets.CheckAddressCorrect(From)) { Correct = false; }
             if (!Wallets.CheckAddressCorrect(To))
             {

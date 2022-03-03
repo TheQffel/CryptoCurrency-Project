@@ -183,7 +183,9 @@ namespace OneCoin
                     bool A = Transactions[i].To.Length <= 25 && BlockHeight < 1000; // Unlock nicknames at 1k
                     bool B = Transactions[i].To.Length >= 99 && BlockHeight < 10000; // Unlock avatars at 10k
                     bool C = Transactions[i].To.Length == 88 && BlockHeight < 100000; // Unlock transactions at 100k
-                    if(A || B || C) { Console.WriteLine("Block " + BlockHeight + " contains locked actions."); return false; }
+                    bool D = Transactions[i].Fee > 0 && BlockHeight < 1000000; // No fee for transactions to 1M
+                    
+                    if(A || B || C || D) { Console.WriteLine("Block " + BlockHeight + " contains locked actions."); return false; }
                     
                     if (!UserTransactions.ContainsKey(Transactions[i].From))
                     {

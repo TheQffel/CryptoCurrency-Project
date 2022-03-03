@@ -20,8 +20,11 @@ namespace OneCoin
         {
             if(Settings.DiscordStatus)
             {
-                RichPresence.Dispose();
-                RichPresence = null;
+                if(RichPresence != null)
+                {
+                    RichPresence.Dispose();
+                    RichPresence = null;
+                }
             }
         }
         
@@ -35,7 +38,7 @@ namespace OneCoin
                 RichPresence DiscordRpc = new();
                 DiscordRpc.Assets = new();
                 DiscordRpc.Assets.LargeImageKey = "onecoin";
-                DiscordRpc.Assets.LargeImageText = "OneCoin is new decentralized cryptocurrency - check it out:  https://github.com/TheQffel/OneCoin   https://discord.gg/SbsFcxFYsg";
+                DiscordRpc.Assets.LargeImageText = "OneCoin is new decentralized crypto currency - check it out:  http://one-coin.org/";
                 if(Account.PublicKey != null)
                 {
                     string Address = Wallets.AddressToShort(Account.PublicKey);
