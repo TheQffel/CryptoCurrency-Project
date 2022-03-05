@@ -284,13 +284,14 @@ namespace OneCoin
             {
                 if(!Console.IsOutputRedirected) // Prevent "double-click" in linux gui instead of launching from terminal.
                 {
+                    Settings.CheckPaths();
+                    
                     if (CheckUpdates)
                     {
                         CheckForUpdates();
                     }
                     
                     Console.WriteLine("Starting node, please wait...");
-                    Settings.CheckPaths();
                     
                     Thread.Sleep(250);
                     Task.Run(() => Network.ListenForConnections());
@@ -327,6 +328,8 @@ namespace OneCoin
 
         static void CheckForUpdates()
         {
+            
+            
             string[] AppFiles = Directory.GetFiles(Settings.AppPath);
 
             for (int i = 0; i < AppFiles.Length; i++)
@@ -389,6 +392,7 @@ namespace OneCoin
                     WebClient.DownloadFile("http://github.com/TheQffel/OneCoin/releases/latest/download/" + ReleaseName, Settings.AppPath + "/Update.zip");
 
                     Console.WriteLine("Extracting update...");
+                    ZipFile.ExtractToDirectory(Settings.AppPath + "/Update.zip", Settings.UpdatePath, true);
                     for (int i = 0; i < AppFiles.Length; i++)
                     {
                         if(AppFiles[i][^4..] == ".dll" || AppFiles[i][^3..] == ".so" || AppFiles[i][^6..] == ".dylib")
@@ -399,8 +403,12 @@ namespace OneCoin
                     File.Move(FileName, FileName + ".backup");
                     FileName = Settings.AppPath + "/Update.zip";
                     Console.WriteLine("");
-                    ZipFile.ExtractToDirectory(FileName, Settings.AppPath, true);
                     File.Move(FileName, FileName + ".backup");
+                    AppFiles = Directory.GetFiles(Settings.UpdatePath);
+                    for (int i = 0; i < AppFiles.Length; i++)
+                    {
+                        File.Move(Settings.UpdatePath + Path.GetFileName(AppFiles[i]), Settings.AppPath + Path.GetFileName(AppFiles[i]));
+                    }
                     File.WriteAllText(Settings.AppPath + "/version.txt", NewVersion);
 
                     Console.WriteLine("Update done, new version will be launched next time you run this app!");

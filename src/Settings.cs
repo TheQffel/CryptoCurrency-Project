@@ -16,6 +16,7 @@ namespace OneCoin
         public static string WalletsPath = AppPath + "/wallets/";
         public static string ServicesPath = AppPath + "/services/";
         public static string ExtrasPath = AppPath + "/extras/";
+        public static string UpdatePath = AppPath + "/update/";
 
         public static uint MemoryLimit = uint.MaxValue;
         public static sbyte ConsoleSize = 0;
@@ -32,6 +33,7 @@ namespace OneCoin
             if (!Directory.Exists(WalletsPath)) { Directory.CreateDirectory(WalletsPath); }
             if (!Directory.Exists(ServicesPath)) { Directory.CreateDirectory(ServicesPath); }
             if (!Directory.Exists(ExtrasPath)) { Directory.CreateDirectory(ExtrasPath); }
+            if (!Directory.Exists(UpdatePath)) { Directory.CreateDirectory(UpdatePath); }
         }
 
         public static void Load()
