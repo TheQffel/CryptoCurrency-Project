@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -311,6 +312,25 @@ namespace OneCoin
             }
 
             return Nodes;
+        }
+        
+        public static string[] ConnectedNodesAddresses()
+        {
+            List<string> Nodes = new();
+
+            for (int i = 0; i < 256; i++)
+            {
+                if (Peers[i] != null)
+                {
+                    if (Peers[i].Connected)
+                    {
+                        IPEndPoint Node = (IPEndPoint)Peers[i].Client.RemoteEndPoint;
+                        Nodes.Add(Node.Address + ":" + Node.Port);
+                    }
+                }
+            }
+
+            return Nodes.ToArray();
         }
 
         public static void Action(TcpClient TcpClient, UdpClient UdpClient, string[] Messages)

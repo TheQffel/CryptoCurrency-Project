@@ -408,6 +408,7 @@ namespace OneCoin
             Console.WriteLine("D - Show block difficulty.");
             Console.WriteLine("M - Show memory usage.");
             Console.WriteLine("T - Show threads.");
+            Console.WriteLine("N - Show connected nodes.");
             Console.WriteLine("B - Blockchain explorer.");
             Console.WriteLine("X - Exit to main menu.");
         }
@@ -460,6 +461,16 @@ namespace OneCoin
                 if(Key == ConsoleKey.T)
                 {
                     Console.WriteLine("You are mining on " + Environment.ProcessorCount + " threads.");
+                }
+                if(Key == ConsoleKey.N)
+                {
+                    Console.WriteLine("You are currently connected to " + Network.ConnectedNodes() + " nodes:");
+                    string[] ConnectedNodes = Network.ConnectedNodesAddresses();
+
+                    for (int i = 0; i < ConnectedNodes.Length; i++)
+                    {
+                        Console.WriteLine(ConnectedNodes[[i]]);
+                    }
                 }
                 if(Key == ConsoleKey.B)
                 {
