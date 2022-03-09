@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
 using System.Threading;
@@ -18,7 +19,8 @@ namespace OneCoin
 
         public static List<Transaction> PendingTransactions = new();
         public static Transaction MinerReward = new();
-
+        public static Thread[] MinerThreads = new Thread[256];
+        
         static uint ValidHashes;
         static uint TotalHashes;
         static DateTime LastReset;
@@ -65,27 +67,63 @@ namespace OneCoin
             return Memories;
         }
         
-        public static void TimeWatch()
+        public static void MiningWatchdog()
         {
-            byte Temp;
+            uint HashesChange = 0;
+            byte Timeout = 0;
             
             while (true)
             {
-                Temp = CurrentHour;
-                if(Temp != CurrentHour)
+                if(KeepMining)
                 {
+                    CurrentHour = (byte)DateTime.Now.Hour;
+                    
                     Statistics.Update();
-                    Task.Run(() => Discord.UpdateService());
+                    Discord.UpdateService();
+
+                    if(HashesChange != TotalHashes)
+                    {
+                        HashesChange = TotalHashes;
+                        Timeout = 0;
+                    }
+                    
+                    if(Timeout++ > 10)
+                    {
+                        if(MonitorMining)
+                        { 
+                            Console.WriteLine("Detected out of sync! Restarting miner...");
+                        }
+                        
+                        StartOrStop((byte)Environment.ProcessorCount);
+                        Thread.Sleep(500);
+                        Blockchain.FixCorruptedBlocks();
+                        PrepareToMining(Blockchain.GetBlock(Blockchain.CurrentHeight));
+                        Thread.Sleep(500);
+                        StartOrStop((byte)Environment.ProcessorCount);
+                        
+                        Timeout = 1;
+                    }
                 }
-                CurrentHour = (byte)DateTime.Now.Hour;
-                Thread.Sleep(1000);
+                
+                if(Network.ConnectedNodes() < 2)
+                {
+                    if(MonitorMining)
+                    {
+                        Console.WriteLine("Lost connection to nodes, reconnecting...");
+                        Network.Broadcast(new[] { "Nodes", "List" });
+                    }
+                }
+                
+                Thread.Sleep(10000);
             }
         }
+        
         public static void PrepareToMining(Block CurrentBlock, byte CustomDifficulty = 0)
         {
             if(CurrentHour > 99)
             {
-                Task.Run(() => TimeWatch());
+                Task.Run(() => MiningWatchdog());
+                Thread.Sleep(1000);
             }
             
             PauseMining = true;
@@ -99,6 +137,8 @@ namespace OneCoin
 
             for (uint i = 0; i < 10; i++)
             {
+                if(!Blockchain.BlockExists(CurrentBlock.BlockHeight - (i + 1))) { if(Program.DebugLogging) { Console.WriteLine("Cannot prepare to mine: Missing blocks!"); } return; }
+                
                 if(Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Difficulty != Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Difficulty && i != 9)
                 {
                     CanBeChanged = false;
@@ -228,8 +268,9 @@ namespace OneCoin
 
                 for (byte i = 0; i < Threads; i++)
                 {
-                    Thread NewThread = new Thread(Mine);
-                    NewThread.Start(i);
+                    MinerThreads[i] = new Thread(Mine);
+                    MinerThreads[i].Start(i);
+                    
                     Thread.Sleep(100);
                 }
             }
@@ -244,11 +285,17 @@ namespace OneCoin
                 Random Random = new();
                 string Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 abcdefghijklmnopqrstuvwxyz";
                 
+                if(MonitorMining)
+                {
+                    Console.WriteLine("Thread " + (Index + 1) + " started!");
+                }
+                
                 while (KeepMining)
                 {
-                    if (PauseMining || Blockchain.Synchronising || Blockchain.BlockExists(ToBeMined[Index].BlockHeight))
+                    if (PauseMining || Blockchain.BlockExists(ToBeMined[Index].BlockHeight))
                     {
                         Thread.Sleep(100);
+                        Console.WriteLine("Mining Paused!");
                     }
                     else
                     {
@@ -266,12 +313,17 @@ namespace OneCoin
                         if (CheckSolution(ToBeMined[Index].CurrentHash, ToBeMined[Index].Difficulty))
                         {
                             if (Program.DebugLogging) { Console.WriteLine("Solution found, verifying now."); }
-                            lock (ToBeMined) { SolutionFound(ToBeMined[Index]); }
+                            lock (ToBeMined[Index]) { SolutionFound(ToBeMined[Index]); }
                         }
 
                         TotalHashes++;
                         HashrateStats[CurrentHour]++;
                     }
+                }
+                
+                if(MonitorMining)
+                {
+                    Console.WriteLine("Thread " + (Index + 1) + " stopped!");
                 }
             }
             catch(Exception Ex)
@@ -314,7 +366,15 @@ namespace OneCoin
                     }
                     
                     Network.Broadcast(BlockData);
-                    Network.Send(null, Network.AddressToClient(PoolAddress), BlockData);
+                    
+                    if(PoolAddress.Length > 5)
+                    {
+                        UdpClient Client = new UdpClient();
+                        Client.Connect(PoolAddress, 10101);
+                        Network.Send(null, Client, BlockData);
+                        Client.Close();
+                        Client.Dispose();
+                    }
 
                     if(MonitorMining)
                     {
@@ -334,9 +394,6 @@ namespace OneCoin
                         Console.WriteLine("Current balance of this address: " + Balance);
                         Console.WriteLine("");
                     }
-                    
-                    Statistics.Update();
-                    Task.Run(() => Discord.UpdateService());
                 }
                 else
                 {
@@ -401,16 +458,32 @@ namespace OneCoin
         public static void PrintControls()
         {
             Console.WriteLine("You are now in mining mode, use keys to control mining:");
-            Console.WriteLine("K - Show keys and controls.");
             Console.WriteLine("A - Account information.");
-            Console.WriteLine("S - Start or stop mining.");
-            Console.WriteLine("H - Show hashrate.");
-            Console.WriteLine("D - Show block difficulty.");
-            Console.WriteLine("M - Show memory usage.");
-            Console.WriteLine("T - Show threads.");
-            Console.WriteLine("N - Show connected nodes.");
             Console.WriteLine("B - Blockchain explorer.");
+            Console.WriteLine("C - Show controls and keys.");
+            Console.WriteLine("D - Show block difficulty.");
+            Console.WriteLine("E - Calculate estimated earnings.");
+            Console.WriteLine("F - Fix corrupted blocks.");
+            Console.WriteLine("G - Generate blockchain checksum.");
+            Console.WriteLine("H - Show mining hashrate.");
+            //Console.WriteLine("I - .");
+            //Console.WriteLine("J - .");
+            //Console.WriteLine("K - .");
+            //Console.WriteLine("L - .");
+            Console.WriteLine("M - Show memory usage.");
+            Console.WriteLine("N - Show connected nodes.");
+            //Console.WriteLine("O - .");
+            //Console.WriteLine("P - .");
+            //Console.WriteLine("Q - .");
+            //Console.WriteLine("R - .");
+            Console.WriteLine("S - Start or stop mining.");
+            Console.WriteLine("T - Show threads count.");
+            //Console.WriteLine("U - .");
+            //Console.WriteLine("V - .");
+            //Console.WriteLine("W - .");
             Console.WriteLine("X - Exit to main menu.");
+            //Console.WriteLine("Y - .");
+            //Console.WriteLine("Z - .");
         }
         
         public static void Menu()
@@ -427,61 +500,101 @@ namespace OneCoin
                 ConsoleKey Key = Console.ReadKey().Key;
                 Console.CursorLeft = 0;
                 
-                if(Key == ConsoleKey.K)
+                switch (Key)
                 {
-                    PrintControls();
-                }
-                if(Key == ConsoleKey.A)
-                {
-                    string Balance = Wallets.GetBalance(MiningAddress).ToString();
-                    Balance = "0." + new string('0', 24 - Balance.Length) + Balance + " ①";
-                    Console.WriteLine("You are mining to address: " + MiningAddress);
-                    Console.WriteLine("Current balance of this address: " + Balance);
-                }
-                if(Key == ConsoleKey.S)
-                {
-                    StartOrStop((byte)Environment.ProcessorCount);
-                }
-                if(Key == ConsoleKey.H)
-                {
-                    string[] Rates = GetHashrate();
-                    Console.WriteLine("Your total speed of all threads is:");
-                    Console.WriteLine(Rates[1] + " ≈ " + Rates[2] + " ≈ " + Rates[3]);
-                }
-                if(Key == ConsoleKey.D)
-                {
-                    Console.WriteLine("Current block difficulty is: " + ToBeMined[234].Difficulty);
-                }
-                if(Key == ConsoleKey.M)
-                {
-                    string[] Memories = GetMemories();
-                    Console.WriteLine("Your total memory consumption is:");
-                    Console.WriteLine(Memories[0] + " ≈ " + Memories[1] + " ≈ " + Memories[2] + " ≈ " + Memories[3]);
-                }
-                if(Key == ConsoleKey.T)
-                {
-                    Console.WriteLine("You are mining on " + Environment.ProcessorCount + " threads.");
-                }
-                if(Key == ConsoleKey.N)
-                {
-                    Console.WriteLine("You are currently connected to " + Network.ConnectedNodes() + " nodes:");
-                    string[] ConnectedNodes = Network.ConnectedNodesAddresses();
-
-                    for (int i = 0; i < ConnectedNodes.Length; i++)
+                    case ConsoleKey.A:
                     {
-                        Console.WriteLine(ConnectedNodes[[i]]);
+                        string Balance = Wallets.GetBalance(MiningAddress).ToString();
+                        Balance = "0." + new string('0', 24 - Balance.Length) + Balance + " ①";
+                        Console.WriteLine("You are mining to address: " + MiningAddress);
+                        Console.WriteLine("Current balance of this address: " + Balance);
+                        break;
                     }
-                }
-                if(Key == ConsoleKey.B)
-                {
-                    MonitorMining = false;
-                    Blockchain.Explore();
-                    PrintControls();
-                    MonitorMining = true;
-                }
-                if(Key == ConsoleKey.X)
-                {
-                    MonitorMining = !MonitorMining;
+                    case ConsoleKey.B:
+                    {
+                        MonitorMining = false;
+                        Blockchain.Explore();
+                        PrintControls();
+                        MonitorMining = true;
+                        break;
+                    }
+                    case ConsoleKey.C:
+                    {
+                        PrintControls();
+                        break;
+                    }
+                    case ConsoleKey.D:
+                    {
+                        Console.WriteLine("Current block difficulty is: " + ToBeMined[234].Difficulty);
+                        break;
+                    }
+                    case ConsoleKey.E:
+                    {
+                        Console.WriteLine("Coming soon!");
+                        break;
+                    }
+                    case ConsoleKey.F:
+                    {
+                        Console.WriteLine("Verifying blocks, please wait...");
+                        Task.Run(() => Blockchain.FixCorruptedBlocks());
+                        break;
+                    }
+                    case ConsoleKey.G:
+                    {
+                        uint Limit = Blockchain.CurrentHeight - 1000;
+                        if(Limit > Blockchain.CurrentHeight) { Limit = 1; }
+                        string Checksum = "OneCoin";
+                        
+                        for (uint i = Limit; i < Blockchain.CurrentHeight; i++)
+                        {
+                            if(Blockchain.BlockExists(i))
+                            {
+                                Block ToCheckSum = Blockchain.GetBlock(i);
+                                Checksum = Hashing.TqHash(ToCheckSum.PreviousHash + Checksum + ToCheckSum.CurrentHash);
+                            }
+                        }
+                        
+                        Console.WriteLine("You are at height " + Blockchain.CurrentHeight + ", your checksum is: " + Checksum[..5] + Checksum[^5..]);
+                        Console.WriteLine("You can generate checksum to check if other nodes have the same blockchain.");
+                        Console.WriteLine("Warning: Checksum changes after each block mined or height changed!");
+                        break;
+                    }
+                    case ConsoleKey.H:
+                    {
+                        string[] Rates = GetHashrate();
+                        Console.WriteLine("Your total speed of all threads is:");
+                        Console.WriteLine(Rates[1] + " ≈ " + Rates[2] + " ≈ " + Rates[3]);
+                        break;
+                    }
+                    case ConsoleKey.M:
+                    {
+                        string[] Memories = GetMemories();
+                        Console.WriteLine("Your total memory consumption is:");
+                        Console.WriteLine(Memories[0] + " ≈ " + Memories[1] + " ≈ " + Memories[2] + " ≈ " + Memories[3]);
+                        break;
+                    }
+                    case ConsoleKey.N:
+                    {
+                        Console.WriteLine("You are currently connected to " + Network.ConnectedNodes() + " nodes:");
+                        string[] ConnectedNodes = Network.ConnectedNodesAddresses();
+                        for (int i = 0; i < ConnectedNodes.Length; i++) {  Console.WriteLine(ConnectedNodes[i]); }
+                        break;
+                    }
+                    case ConsoleKey.S:
+                    {
+                        StartOrStop((byte)Environment.ProcessorCount);
+                        break;
+                    }
+                    case ConsoleKey.T:
+                    {
+                        Console.WriteLine("You are mining on " + Environment.ProcessorCount + " threads.");
+                        break;
+                    }
+                    case ConsoleKey.X:
+                    {
+                        MonitorMining = !MonitorMining;
+                        break;
+                    }
                 }
             }
         }

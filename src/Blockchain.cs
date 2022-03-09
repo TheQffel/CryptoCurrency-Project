@@ -5,29 +5,19 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Numerics;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace OneCoin
 {
     class Blockchain
     {
         public static uint CurrentHeight = 1;
-        public static bool Synchronising = true;
+        public static bool SyncMode = true;
         
         static Dictionary<uint, Block> BlocksInMemory = new();
         static readonly object FileSystemRead = new();
         static readonly object FileSystemWrite = new();
+        static readonly object WholeBlockchain = new();
 
-        public static Dictionary<string, BigInteger> BalanceCache = new();
-        public static Dictionary<string, string> NicknameCache = new();
-        public static Dictionary<string, string> AvatarsCache = new();
-        public static Dictionary<string, uint> NameSetCache = new();
-        public static Dictionary<string, uint> LastUseCache = new();
-
-        public static uint CacheHeight = 0;
-        public static bool CacheUpdateInProgress = false;
-        public static string CacheHash = GetBlock(0).CurrentHash;
-        
         public static string DatabaseHost = "";
         public static string DatabaseUser = "";
         public static string DatabasePass = "";
@@ -38,66 +28,12 @@ namespace OneCoin
         public static string TempBlocksPath = "";
         
         public static List<string> AllKnownAddresses = new();
-
-        public static void UpdateCache()
-        {
-            if(!CacheUpdateInProgress)
-            {
-                CacheUpdateInProgress = true;
-                
-                while (CacheHeight < CurrentHeight)
-                {
-                    CacheHeight++;
-                    
-                    Block OneCoinBlock = GetBlock(CacheHeight);
-                    string ThisBlockMiner = OneCoinBlock.Transactions[0].To;
-                    CheckIfExistsInCache(ThisBlockMiner, CacheHeight);
-                    BalanceCache[ThisBlockMiner] += OneCoinBlock.Transactions[0].Amount;
-                    LastUseCache[ThisBlockMiner] = CacheHeight;
-                    CacheHash = Hashing.TqHash(CacheHash + " | " + OneCoinBlock.CurrentHash);
-
-                    for (int i = 1; i < OneCoinBlock.Transactions.Length; i++)
-                    {
-                        CheckIfExistsInCache(OneCoinBlock.Transactions[i].From, CacheHeight);
-                        
-                        if(OneCoinBlock.Transactions[i].To.Length < 77)
-                        {
-                            BalanceCache[OneCoinBlock.Transactions[i].From] -= OneCoinBlock.Transactions[i].Amount;
-                            BalanceCache[ThisBlockMiner] += OneCoinBlock.Transactions[i].Amount;
-                            LastUseCache[OneCoinBlock.Transactions[i].From] = CacheHeight;
-                            NicknameCache[OneCoinBlock.Transactions[i].From] = OneCoinBlock.Transactions[i].To;
-                            NameSetCache[OneCoinBlock.Transactions[i].From] = CacheHeight;
-                        }
-                        if(OneCoinBlock.Transactions[i].To.Length == 88)
-                        {
-                            CheckIfExistsInCache(OneCoinBlock.Transactions[i].To, CacheHeight);
-                            
-                            BalanceCache[OneCoinBlock.Transactions[i].From] -= OneCoinBlock.Transactions[i].Amount;
-                            BalanceCache[OneCoinBlock.Transactions[i].To] += OneCoinBlock.Transactions[i].Amount;
-                            LastUseCache[OneCoinBlock.Transactions[i].From] = CacheHeight;
-                        }
-                        if(OneCoinBlock.Transactions[i].To.Length > 99)
-                        {
-                            BalanceCache[OneCoinBlock.Transactions[i].From] -= OneCoinBlock.Transactions[i].Amount;
-                            BalanceCache[ThisBlockMiner] += OneCoinBlock.Transactions[i].Amount;
-                            LastUseCache[OneCoinBlock.Transactions[i].From] = CacheHeight;
-                            AvatarsCache[OneCoinBlock.Transactions[i].From] = OneCoinBlock.Transactions[i].To;
-                        }
-                    }
-                    
-                    if(Program.DebugLogging)
-                    {
-                        if(CacheHeight % 1000000 == 0)
-                        {
-                            Console.WriteLine("Cache at height " + CacheHeight + "...");
-                        }
-                    }
-                }
-                
-                CacheUpdateInProgress = false;
-            }
-        }
         
+        public static Dictionary<long, Dictionary<uint, Block>> NodesChain = new();
+        public static Dictionary<long, bool> NodesLock = new();
+        public static Dictionary<long, uint> NodesMin = new();
+        public static Dictionary<long, uint> NodesMax = new();
+
         public static void DatabaseSync()
         {
             try
@@ -181,95 +117,162 @@ namespace OneCoin
             }
         }
         
-        public static bool VerifyCache()
+        public static void FixCorruptedBlocks()
         {
-            string CalculatedCacheHash = GetBlock(0).CurrentHash;
-                
-            for (uint i = 1; i < CacheHeight; i++)
-            {
-                CacheHash = Hashing.TqHash(CacheHash + " | " + GetBlock(i).CurrentHash);
-            }
-            
-            if(Program.DebugLogging)
-            {
-                Console.WriteLine("Invalid hash detected!");
-            }
-            
-            return CalculatedCacheHash == CacheHash;
-        }
-        
-        public static void ClearCache()
-        {
-            while(CacheUpdateInProgress)
-            {
-                Thread.Sleep(100);
-            }
-            BalanceCache = new();
-            NicknameCache = new();
-            AvatarsCache = new();
-            NameSetCache = new();
-            LastUseCache = new();
-            CacheHeight = 0;
-        }
-        
-        public static void CheckIfExistsInCache(string Address, uint Height)
-        {
-            if(!BalanceCache.ContainsKey(Address))
-            {
-                BalanceCache[Address] = 0;
-                NicknameCache[Address] = "";
-                AvatarsCache[Address] = "";
-                NameSetCache[Address] = 0;
-                LastUseCache[Address] = Height;
-            }
-            if(DatabaseHost.Length > 1)
-            {
-                if(!AllKnownAddresses.Contains(Address))
-                {
-                    AllKnownAddresses.Add(Address);
-                }
-            }
-        }
-        
-        public static bool BlockExists(uint Height)
-        {
-            return BlocksInMemory.ContainsKey(Height) || File.Exists(Settings.BlockchainPath + Height + ".dat");
-        }
+            bool DeleteNow = false;
+            uint TempHeight = CurrentHeight;
 
-        public static void SyncBlocks(bool Force = false)
-        {
-            if(!Synchronising || Force)
+            for (uint i = 1; i < CurrentHeight; i++)
             {
-                Synchronising = true;
-
-                CurrentHeight = 0;
-
-                while (CurrentHeight < 1)
+                if(!DeleteNow)
                 {
-                    Network.Send(Network.RandomClient(), null, new[] { "Block", "Height", CurrentHeight.ToString() });
-                    Thread.Sleep(100);
-                }
-                for (uint i = LastBlockExists() + 1; i < CurrentHeight; i++)
-                {
-                    while (!BlockExists(i))
+                    if(BlockExists(i))
                     {
-                        Network.Send(Network.RandomClient(), null, new[] { "Block", "Get", i.ToString() });
-                        Thread.Sleep(100);
-                    }
-                    if(Program.DebugLogging)
-                    {
-                        if(CurrentHeight % 1000 == 0)
+                        if(!GetBlock(i).CheckBlockCorrect())
                         {
-                            Console.WriteLine("Current progress: " + i + " / " + CurrentHeight);
+                            TempHeight = i - 1;
+                            DeleteNow = true;
                         }
                     }
+                    else
+                    {
+                        TempHeight = i - 1;
+                        DeleteNow = true;
+                    }
+                    
                 }
-                Task.Run(() => UpdateCache());
-
-                Mining.PrepareToMining(GetBlock(CurrentHeight));
-
-                Synchronising = false;
+                if(DeleteNow)
+                {
+                    if(BlockExists(i))
+                    {
+                        DelBlock(i);
+                    }
+                }
             }
+            
+            CurrentHeight = TempHeight;
+        }
+        
+        public static void SyncBlocks()
+        {
+            SyncMode = true;
+            byte Timeout = 0;
+            
+            Console.WriteLine("You are not synced at height: " + CurrentHeight);
+            
+            for (uint i = CurrentHeight + 1; i < uint.MaxValue; i++)
+            {
+                while(!BlockExists(i) && Timeout <= 100)
+                {
+                    if(Timeout % 10 == 0)
+                    {
+                        Network.Send(Network.RandomClient(), null, new [] { "Block", "Get", i.ToString() } );
+                    }
+                    
+                    Thread.Sleep(10);
+                    Timeout++;
+                }
+                if(Timeout > 100)
+                {
+                    break;
+                }
+                Timeout = 0;
+                
+                if(i % 1000 == 0)
+                {
+                    Console.WriteLine("Current synchronisation height: " + i);
+                }
+            }
+            
+            Console.WriteLine("You are now synced to height: " + CurrentHeight);
+            
+            SyncMode = false;
+            FixCorruptedBlocks();
+        }
+        
+        public static uint CheckOtherNodes(long NodeId)
+        {
+            uint Result = 0;
+            
+            uint Lowest = NodesMin[NodeId];
+            uint Highest = NodesMax[NodeId];
+            
+            if(Highest > CurrentHeight)
+            {
+                for (uint i = Highest; i + 250 > Highest && i != 0; i--)
+                {
+                    if(NodesChain[NodeId].ContainsKey(i))
+                    {
+                        if(NodesChain[NodeId].ContainsKey(i+1))
+                        {
+                            if(NodesChain[NodeId][i+1].PreviousHash != NodesChain[NodeId][i].CurrentHash)
+                            {
+                                Result = Highest;
+                                NodesChain[NodeId] = new Dictionary<uint, Block>();
+                                NodesMin[NodeId] = uint.MaxValue;
+                                NodesMax[NodeId] = uint.MinValue;
+                                break;
+                            }
+                        }
+                        
+                        if(BlockExists(i))
+                        {
+                            if(NodesChain[NodeId][i].CurrentHash == GetBlock(i).CurrentHash && NodesChain[NodeId][i].PreviousHash == GetBlock(i).PreviousHash)
+                            {
+                                lock(WholeBlockchain)
+                                {
+                                    bool AllCorrect = true;
+                                    
+                                    for (uint j = i; j <= Highest; j++)
+                                    {
+                                        if(!GetBlock(j, NodeId).CheckBlockCorrect(NodeId))
+                                        {
+                                            AllCorrect = false;
+                                        }
+                                    }
+                                    
+                                    if(AllCorrect)
+                                    {
+                                        for (uint j = i; j <= Highest; j++)
+                                        {
+                                            if(BlockExists(j))
+                                            {
+                                                DelBlock(j);
+                                            }
+                                            SetBlock(GetBlock(j, NodeId));
+                                        }
+                                        Mining.PrepareToMining(GetBlock(Highest));
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Result = i;
+                        break;
+                    }
+                }
+                
+                while(Lowest + 250 < CurrentHeight && BlockExists(Lowest))
+                {
+                    if(NodesChain[NodeId].ContainsKey(Lowest))
+                    {
+                        NodesChain[NodeId].Remove(Lowest);
+                    }
+                    Lowest++;
+                }
+            }
+            
+            return Result;
+        }
+        
+        public static bool BlockExists(uint Height, long NodeId = -1)
+        {
+            bool AvailableOnNodes = false;
+            if(NodeId > -1) { AvailableOnNodes = NodesChain[NodeId].ContainsKey(Height); }
+            return (BlocksInMemory.ContainsKey(Height) || File.Exists(Settings.BlockchainPath + Height + ".dat")) && CurrentHeight >= Height || AvailableOnNodes;
         }
 
         public static uint LastBlockExists()
@@ -299,9 +302,23 @@ namespace OneCoin
             return Result;
         }
 
-        public static Block GetBlock(uint Height)
+        public static Block GetBlock(uint Height, long NodeId = -1)
         {
-            if (!BlocksInMemory.ContainsKey(Height))
+            if(NodeId > -1)
+            {
+                if(NodesChain[NodeId].ContainsKey(Height))
+                {
+                    return NodesChain[NodeId][Height];
+                }
+            }
+            if (BlocksInMemory.ContainsKey(Height))
+            {
+                if(BlocksInMemory[Height] == null)
+                {
+                    BlocksInMemory[Height] = LoadBlock(Height);
+                }
+            }
+            else
             {
                 BlocksInMemory[Height] = LoadBlock(Height);
             }
@@ -310,13 +327,8 @@ namespace OneCoin
 
         public static void SetBlock(Block Block)
         {
-            if (!BlocksInMemory.ContainsKey(Block.BlockHeight))
-            {
-                BlocksInMemory[Block.BlockHeight] = Block;
-            }
+            BlocksInMemory[Block.BlockHeight] = Block;
             SaveBlock(Block);
-            
-            Task.Run(() => UpdateCache());
         }
 
         public static void DelBlock(uint Height)
@@ -334,65 +346,62 @@ namespace OneCoin
                 File.Delete(Settings.TransactionsPath + Height + ".dat");
             }
             
-            Task.Run(() => ClearCache());
+            if(Height <= CurrentHeight)
+            {
+                CurrentHeight = Height - 1;
+            }
         }
 
         static Block LoadBlock(uint Height)
         {
-            Block OneBlock = new();
-            OneBlock.BlockHeight = Height;
+            Block OneBlock = null;
             
             if(Height < 1)
             {
+                OneBlock = new();
+                OneBlock.BlockHeight = Height;
                 OneBlock.CurrentHash = "1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0";
                 return OneBlock;
             }
 
-            if (File.Exists(Settings.BlockchainPath + Height + ".dat") && File.Exists(Settings.TransactionsPath + Height + ".dat"))
+            byte Timeout = 0;
+            while ((!File.Exists(Settings.BlockchainPath + Height + ".dat") || !File.Exists(Settings.TransactionsPath + Height + ".dat")) && Timeout++ < 100)
             {
-                lock (FileSystemRead)
-                {
-                    using BinaryReader BlockFile = new(File.Open(Settings.BlockchainPath + Height + ".dat", FileMode.Open));
-                    using BinaryReader TransactionsFile = new(File.Open(Settings.TransactionsPath + Height + ".dat", FileMode.Open));
-
-                    OneBlock.PreviousHash = BlockFile.ReadString();
-                    OneBlock.CurrentHash = BlockFile.ReadString();
-                    OneBlock.Timestamp = BlockFile.ReadUInt64();
-                    OneBlock.Difficulty = BlockFile.ReadByte();
-
-                    OneBlock.ExtraData = Convert.ToBase64String(BlockFile.ReadBytes(3072)).Replace('+', ' ').Replace('/', '|');
-
-                    OneBlock.Transactions = new Transaction[BlockFile.ReadUInt16()];
-
-                    for (int i = 0; i < OneBlock.Transactions.Length; i++)
-                    {
-                        OneBlock.Transactions[i] = new();
-                        OneBlock.Transactions[i].From = TransactionsFile.ReadString();
-                        OneBlock.Transactions[i].To = TransactionsFile.ReadString();
-                        OneBlock.Transactions[i].Amount = BytesToBigInt(TransactionsFile.ReadBytes(12));
-                        OneBlock.Transactions[i].Fee = TransactionsFile.ReadUInt64();
-                        OneBlock.Transactions[i].Timestamp = TransactionsFile.ReadUInt64();
-                        OneBlock.Transactions[i].Message = TransactionsFile.ReadString();
-                        OneBlock.Transactions[i].Signature = TransactionsFile.ReadString();
-                    }
-                    
-                    BlockFile.Close();
-                    TransactionsFile.Close();
-                }
+                Network.Send(Network.RandomClient(), null, new [] { "Block", "Get", Height.ToString() } );
+                
+                Thread.Sleep(100);
             }
             
-            if(OneBlock.Transactions.Length < 1 && Height > 0)
+            lock (FileSystemRead)
             {
-                for (int i = 0; i < 100; i++)
-                {
-                    Network.Send(Network.RandomClient(), null, new[] { "Block", "Get", Height.ToString() });
-                    Thread.Sleep(100);
+                using BinaryReader BlockFile = new(File.Open(Settings.BlockchainPath + Height + ".dat", FileMode.Open));
+                using BinaryReader TransactionsFile = new(File.Open(Settings.TransactionsPath + Height + ".dat", FileMode.Open));
 
-                    if (BlockExists(Height))
-                    {
-                        return LoadBlock(Height);
-                    }
+                OneBlock = new();
+                OneBlock.BlockHeight = Height;
+                OneBlock.PreviousHash = BlockFile.ReadString();
+                OneBlock.CurrentHash = BlockFile.ReadString();
+                OneBlock.Timestamp = BlockFile.ReadUInt64();
+                OneBlock.Difficulty = BlockFile.ReadByte();
+
+                OneBlock.ExtraData = Convert.ToBase64String(BlockFile.ReadBytes(3072)).Replace('+', ' ').Replace('/', '|');
+
+                OneBlock.Transactions = new Transaction[BlockFile.ReadUInt16()];
+
+                for (int i = 0; i < OneBlock.Transactions.Length; i++)
+                {
+                    OneBlock.Transactions[i] = new();
+                    OneBlock.Transactions[i].From = TransactionsFile.ReadString();
+                    OneBlock.Transactions[i].To = TransactionsFile.ReadString();
+                    OneBlock.Transactions[i].Amount = BytesToBigInt(TransactionsFile.ReadBytes(12));
+                    OneBlock.Transactions[i].Fee = TransactionsFile.ReadUInt64();
+                    OneBlock.Transactions[i].Timestamp = TransactionsFile.ReadUInt64();
+                    OneBlock.Transactions[i].Message = TransactionsFile.ReadString();
+                    OneBlock.Transactions[i].Signature = TransactionsFile.ReadString();
                 }
+                
+                BlockFile.Close();
+                TransactionsFile.Close();
             }
             return OneBlock;
         }

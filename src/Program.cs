@@ -284,6 +284,7 @@ namespace OneCoin
             {
                 if(!Console.IsOutputRedirected) // Prevent "double-click" in linux gui instead of launching from terminal.
                 {
+                    Console.Clear();
                     Settings.CheckPaths();
                     
                     if (CheckUpdates)
@@ -293,17 +294,27 @@ namespace OneCoin
                     
                     Console.WriteLine("Starting node, please wait...");
                     
-                    Thread.Sleep(250);
                     Task.Run(() => Network.ListenForConnections());
-                    Thread.Sleep(250);
                     Task.Run(() => Network.ListenForPackets());
-                    Thread.Sleep(250);
                     Network.SearchVerifiedNodes();
-                    Thread.Sleep(250);
+                    
+                    Thread.Sleep(1000);
+                    
+                    while(Network.ConnectedNodes() == 0)
+                    {
+                        Console.WriteLine("You are not connected to any nodes!");
+                        Console.WriteLine("Make sure you have internet connection!");
+                        Console.WriteLine("Then press any key to try again...");
+                        Console.ReadKey();
+                        Network.SearchVerifiedNodes();
+                        Console.WriteLine("Trying again... \n");
+                        Thread.Sleep(1000);
+                    }
                     
                     Console.WriteLine("Synchronising blocks...");
-                    Task.Run(() => Blockchain.SyncBlocks(true));
-                    Thread.Sleep(1000);
+                    Blockchain.CurrentHeight = Blockchain.LastBlockExists();
+                    Blockchain.FixCorruptedBlocks();
+                    Blockchain.SyncBlocks();
                     
                     Settings.Load();
                     Discord.StartService();
@@ -316,9 +327,10 @@ namespace OneCoin
                 }
                 else
                 {
-                    File.WriteAllText("Run_Me_From_Terminal", "Alternatively, create onecoin.desktop file.");
+                    Console.WriteLine("If you see this text you have probably redirected output!");
+                    File.WriteAllText(Settings.AppPath + "/Run_Me_From_Terminal", "Alternatively, create onecoin.desktop file.");
                     Thread.Sleep(100000);
-                    File.Delete("Run_Me_From_Terminal");
+                    File.Delete(Settings.AppPath + "/Run_Me_From_Terminal");
                 }
             }
 
@@ -328,8 +340,6 @@ namespace OneCoin
 
         static void CheckForUpdates()
         {
-            
-            
             string[] AppFiles = Directory.GetFiles(Settings.AppPath);
 
             for (int i = 0; i < AppFiles.Length; i++)
@@ -421,6 +431,7 @@ namespace OneCoin
                 Console.ForegroundColor = ConsoleColor.DarkBlue;
                 Console.WriteLine("Check github every few days for newer version.");
             }
+            Console.ForegroundColor = ConsoleColor.White;
             Thread.Sleep(1000);
         }
 

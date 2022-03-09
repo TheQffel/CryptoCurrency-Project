@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Threading.Tasks;
 
 namespace OneCoin
 {
@@ -67,8 +68,8 @@ namespace OneCoin
             }
         }
 
-        public void RecalculateHash(bool CalculateTransactionsHash = true)
-        {
+        public void RecalculateHash(bool CalculateTransactionsHash = true, long NodeId = -1)
+        { 
             if(CalculateTransactionsHash)
             {
                 RecalculateTransactions();
@@ -85,24 +86,31 @@ namespace OneCoin
                 
                 if (HistoricalHeight > 0)
                 {
-                    Block HistoricalBlock = Blockchain.GetBlock((uint)HistoricalHeight);
-
-                    long TransactionNumber = BlockHeight + (long)Hashing.SumHash(CurrentHash);
-
-                    for (int j = 0; j < HistoricalBlock.CurrentHash.Length; j++)
-                    {
-                        TransactionNumber += (long)Hashing.HashEncodingIndex(HistoricalBlock.CurrentHash[j]) * (j + 1);
-                    }
-                    TransactionNumber %= HistoricalBlock.Transactions.Length;
+                    if(!Blockchain.BlockExists((uint)HistoricalHeight, NodeId)) { CurrentHash = PreviousHash; break; }
+                    Block HistoricalBlock = Blockchain.GetBlock((uint)HistoricalHeight, NodeId);
                     
-                    CurrentHash = HistoricalBlock.Transactions[TransactionNumber].Hash(CurrentHash, "");
+                    if(HistoricalBlock.Transactions.Length > 0)
+                    {
+                        long TransactionNumber = BlockHeight + (long)Hashing.SumHash(CurrentHash);
+
+                        for (int j = 0; j < HistoricalBlock.CurrentHash.Length; j++)
+                        {
+                            TransactionNumber += (long)Hashing.HashEncodingIndex(HistoricalBlock.CurrentHash[j]) * (j + 1);
+                        }
+                        TransactionNumber %= HistoricalBlock.Transactions.Length;
+                        
+                        CurrentHash = HistoricalBlock.Transactions[TransactionNumber].Hash(CurrentHash, "");
+                    }
+                    else
+                    {
+                        Task.Run(() => Blockchain.FixCorruptedBlocks());
+                    }
                 }
                 else { break; }
             }
         }
 
-
-        public bool CheckBlockCorrect()
+        public bool CheckBlockCorrect(long NodeId = -1)
         {
             // Mode Types: 1: Only length checking.
             // 2: Hex (Lower), 3: Base32 (Upper),
@@ -111,19 +119,26 @@ namespace OneCoin
             // 6: Base64 (No Spaces, Separators),
             // 7: Base64 (Spaces, Separators)
 
-            if (BlockHeight <= 1) { return true; }
+            if (BlockHeight == 0) { return true; }
+            if (BlockHeight == 1) { return Transactions.Length > 0; }
 
-            Block PreviousBlock = Blockchain.GetBlock(BlockHeight - 1);
+            for (uint i = BlockHeight - 1; i + 10 >= BlockHeight && i != 0; i--)
+            {
+                if(!Blockchain.BlockExists(i, NodeId)) { if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Missing previous blocks."); } return false; }
+            }
+            
+            Block PreviousBlock = Blockchain.GetBlock(BlockHeight - 1, NodeId);
             bool Correct = true;
 
-            RecalculateHash();
+            RecalculateHash(true, NodeId);
             
+            if (PreviousHash == CurrentHash) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Missing historical blocks."); } }
             if (PreviousHash != PreviousBlock.CurrentHash) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong previous hash."); } }
             if(!Mining.CheckSolution(CurrentHash, Difficulty)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong current hash."); } }
 
-            if (!Hashing.CheckStringFormat(PreviousHash, 3, 205, 205)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong previous hash."); } }
-            if (!Hashing.CheckStringFormat(CurrentHash, 3, 205, 205)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong current hash."); } }
-            if (!Hashing.CheckStringFormat(ExtraData, 7, 4096, 4096)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong extra data."); } }
+            if (!Hashing.CheckStringFormat(PreviousHash, 3, 205, 205)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong previous hash format."); } }
+            if (!Hashing.CheckStringFormat(CurrentHash, 3, 205, 205)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong current hash format."); } }
+            if (!Hashing.CheckStringFormat(ExtraData, 7, 4096, 4096)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong extra data format."); } }
 
             string[] Extras = ExtraData.Split('|');
             if (Extras.Length != 3) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong extras data number."); } }
@@ -141,11 +156,11 @@ namespace OneCoin
                 
                 for (uint i = 0; i < 10; i++)
                 {
-                    if(Blockchain.GetBlock(BlockHeight - (i + 1)).Difficulty != Blockchain.GetBlock(BlockHeight - (i + 2)).Difficulty && i != 9)
+                    if(Blockchain.GetBlock(BlockHeight - (i + 1), NodeId).Difficulty != Blockchain.GetBlock(BlockHeight - (i + 2), NodeId).Difficulty && i != 9)
                     {
                         CanBeChanged = false;
                     }
-                    TimestampDifferences[i] = Blockchain.GetBlock(BlockHeight - (i + 1)).Timestamp - Blockchain.GetBlock(BlockHeight - (i + 2)).Timestamp;
+                    TimestampDifferences[i] = Blockchain.GetBlock(BlockHeight - (i + 1), NodeId).Timestamp - Blockchain.GetBlock(BlockHeight - (i + 2), NodeId).Timestamp;
                 }
                 
                 if(CanBeChanged)
@@ -190,12 +205,12 @@ namespace OneCoin
                     if (!UserTransactions.ContainsKey(Transactions[i].From))
                     {
                         UserTransactions[Transactions[i].From] = 0;
-                        UserBalance[Transactions[i].From] = Wallets.GetBalance(Transactions[i].From, BlockHeight - 1);
+                        UserBalance[Transactions[i].From] = Wallets.GetBalance(Transactions[i].From, NodeId, BlockHeight - 1);
                         SpecialTransaction[Transactions[i].From] = false;
                     }
                     UserTransactions[Transactions[i].From]++;
                     if (UserTransactions[Transactions[i].From] > Difficulty) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Too much transactions."); } }
-                    if (!Transactions[i].CheckTransactionCorrect(UserBalance[Transactions[i].From], BlockHeight)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong transaction."); } }
+                    if (!Transactions[i].CheckTransactionCorrect(UserBalance[Transactions[i].From], BlockHeight, NodeId)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong transaction."); } }
                     UserBalance[Transactions[i].From] -= Transactions[i].Amount;
 
                     if (Transactions[i].Timestamp + 1000000 < Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
@@ -207,7 +222,7 @@ namespace OneCoin
                     if(Transactions[i].Signature.Length == 205) { SpecialTransaction[Transactions[i].From] = true;  }
                     if(SpecialTransaction[Transactions[i].From] && UserTransactions[Transactions[i].From] > 1) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Account data change with transactions."); } }
 
-                    if (Wallets.CheckTransactionAlreadyIncluded(Transactions[i], BlockHeight-1)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Already included."); } }
+                    if (Wallets.CheckTransactionAlreadyIncluded(Transactions[i], NodeId, BlockHeight-1)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Already included."); } }
                 }
             }
 

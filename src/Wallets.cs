@@ -5,7 +5,6 @@ using Org.BouncyCastle.Security;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using System.Numerics;
 using System.Text;
 using ZXing;
@@ -16,49 +15,114 @@ namespace OneCoin
     {
         public static string[] AddressEncoding = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", " ", "|" };
         public static ulong[] MinerRewards = { 423539247696576513, 288230376151711744, 144115188075855872, 72057594037927936, 36028797018963968, 18014398509481984, 9007199254740992, 4503599627370496, 2251799813685248, 1125899906842624, 562949953421312, 281474976710656, 140737488355328, 70368744177664, 35184372088832, 17592186044416, 8796093022208, 4398046511104, 2199023255552, 1099511627776, 549755813888, 274877906944, 137438953472, 68719476736, 34359738368, 17179869184, 8589934592, 4294967296, 2147483648, 1073741824, 536870912, 268435456, 134217728, 67108864, 33554432, 16777216, 8388608, 4194304, 2097152, 1048576, 524288, 262144, 131072, 65536, 32768, 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0, 0, 0, 0 };
+
+        public static uint LastCacheHeight = 0;
+        public static bool CacheUpdateInProgress = false;
+        
+        public static Dictionary<string, KeyValuePair<string, uint>> NicknameCache = new();
+        public static Dictionary<string, KeyValuePair<string, uint>> AvatarsCache = new();
+        
+        public static void UpdateNicknamesAvatarsCache()
+        {
+            if(!CacheUpdateInProgress)
+            {
+                CacheUpdateInProgress = true;
+
+                for (uint i = LastCacheHeight; i < Blockchain.CurrentHeight - 10; i++)
+                {
+                    Block OneCoinBlock = Blockchain.GetBlock(i);
+
+                    for (int j = 1; j < OneCoinBlock.Transactions.Length; j++)
+                    {
+                        if(OneCoinBlock.Transactions[j].To.Length < 50)
+                        {
+                            NicknameCache[OneCoinBlock.Transactions[j].From] = new KeyValuePair<string, uint>(OneCoinBlock.Transactions[j].To, i);
+                        }
+                        if(OneCoinBlock.Transactions[j].To.Length > 100)
+                        {
+                            AvatarsCache[OneCoinBlock.Transactions[j].From] = new KeyValuePair<string, uint>(OneCoinBlock.Transactions[j].To, i);
+                        }
+                    }
+                }
+                
+                CacheUpdateInProgress = false;
+            }
+        }
         
         public static string GetName(string Address)
         {
-            Blockchain.CheckIfExistsInCache(Address, Blockchain.CurrentHeight - 1);
+            string Nickname = "";
+            UpdateNicknamesAvatarsCache();
             
-            if(Blockchain.BalanceCache[Address] > 0)
+            if(NicknameCache.ContainsKey(Address))
             {
-                string Nickname = Blockchain.NicknameCache[Address];
-                string[] Results = Blockchain.NicknameCache.Where(Entry => string.Equals(Entry.Value.Replace(" ", ""), Nickname.Replace(" ", ""), StringComparison.CurrentCultureIgnoreCase)).Select(Entry => Entry.Key).ToArray();
-                byte Tag = 1;
-
-                if(Results.Length > 1)
+                if(GetBalance(Address) > 0)
                 {
-                    for (int i = 0; i < Results.Length; i++)
+                    Nickname = NicknameCache[Address].Key;
+                    byte Tag = 1;
+
+                    foreach(KeyValuePair<string, KeyValuePair<string, uint>> Entry in NicknameCache)
                     {
-                        if(Blockchain.NameSetCache[Results[i]] < Blockchain.NameSetCache[Address])
+                        if(Entry.Value.Key.Replace(" ", "").ToLower() == Nickname.Replace(" ", "").ToLower())
                         {
-                            if(Blockchain.BalanceCache[Results[i]] > 0)
+                            if(Entry.Value.Value < NicknameCache[Address].Value)
                             {
                                 Tag++;
                             }
                         }
                     }
+                    
+                    Nickname = Nickname + "|" + Tag;
                 }
-                return Nickname + "|" + Tag;
             }
-            return "";
+            return Nickname;
+        }
+        
+        public static string GetAvatar(string Address)
+        {
+            string Avatar = "";
+            UpdateNicknamesAvatarsCache();
+            
+            if(AvatarsCache.ContainsKey(Address))
+            {
+                if(GetBalance(Address) > 0)
+                {
+                    Avatar = AvatarsCache[Address].Key;
+                }
+            }
+            return Avatar;
+        }
+        
+        public static string GetAddress(string Name, byte Tag = 1)
+        {
+            string Address = "";
+            UpdateNicknamesAvatarsCache();
+            
+            foreach(KeyValuePair<string, KeyValuePair<string, uint>> Entry in NicknameCache)
+            {
+                if(Entry.Value.Key.Replace(" ", "").ToLower() == Name.Replace(" ", "").ToLower())
+                {
+                    if(GetName(Entry.Value.Key).Split('|')[1] == Tag.ToString())
+                    {
+                        Address = Entry.Key;
+                    }
+                }
+            }
+            return Address;
         }
 
-        public static BigInteger GetBalance(string Address, uint BlockHeight = 0)
+        public static BigInteger GetBalance(string Address, long NodeId = -1, uint BlockHeight = 0)
         {
-            Blockchain.CheckIfExistsInCache(Address, Blockchain.CurrentHeight - 1);
-            
             if(BlockHeight == 0)
             {
-                return Blockchain.BalanceCache[Address];
+                BlockHeight = Blockchain.CurrentHeight;
             }
             
             BigInteger Balance = 0;
 
             for (uint i = 1; i <= BlockHeight; i++)
             {
-                Block OneCoinBlock = Blockchain.GetBlock(i);
+                Block OneCoinBlock = Blockchain.GetBlock(i, NodeId);
 
                 for (int j = 0; j < OneCoinBlock.Transactions.Length; j++)
                 {
@@ -85,50 +149,19 @@ namespace OneCoin
             return Balance;
         }
 
-        public static string GetAvatar(string Address)
+        public static uint GetLastUsedBlock(string Address, long NodeId = -1, uint BlockHeight = 0)
         {
-            Blockchain.CheckIfExistsInCache(Address, Blockchain.CurrentHeight - 1);
-            
-            return Blockchain.AvatarsCache[Address];
-        }
-
-        public static string GetAddress(string Name, byte Tag = 1)
-        {
-            string[] Results = Blockchain.NicknameCache.Where(Entry => string.Equals(Entry.Value.Replace(" ", ""), Name.Replace(" ", ""), StringComparison.CurrentCultureIgnoreCase)).Select(Entry => Entry.Key).ToArray();
-            List<KeyValuePair<string, uint>> Addresses = new();
-
-            for (int i = 0; i < Results.Length; i++)
-            {
-                if(Blockchain.BalanceCache[Results[i]] > 0)
-                {
-                    Addresses.Add(new KeyValuePair<string, uint>(Results[i], Blockchain.NameSetCache[Results[i]]));
-                }
-            }
-            
-            Addresses.Sort((DateA, DateB) => DateA.Value.CompareTo(DateB.Value));
-
-            if(Addresses.Count > Tag - 1)
-            {
-                return Addresses[Tag - 1].Key;
-            }
-            return "";
-        }
-        
-        public static uint GetLastUsedBlock(string Address, uint BlockHeight = 0)
-        {
-            Blockchain.CheckIfExistsInCache(Address, Blockchain.CurrentHeight - 1);
-            
             if(BlockHeight == 0)
             {
-                return Blockchain.LastUseCache[Address];
+                BlockHeight = Blockchain.CurrentHeight;
             }
             
             uint LastUse = 0;
 
             for (uint i = 1; i <= BlockHeight; i++)
             {
-                Block OneCoinBlock = Blockchain.GetBlock(i);
-
+                Block OneCoinBlock = Blockchain.GetBlock(i, NodeId);
+                
                 for (int j = 0; j < OneCoinBlock.Transactions.Length; j++)
                 {
                     if (OneCoinBlock.Transactions[j].From == Address)
@@ -148,7 +181,7 @@ namespace OneCoin
             return LastUse;
         }
 
-        public static bool CheckTransactionAlreadyIncluded(Transaction Transaction, uint BlockHeight = 0)
+        public static bool CheckTransactionAlreadyIncluded(Transaction Transaction, long NodeId = -1, uint BlockHeight = 0)
         {
             if(BlockHeight == 0)
             {
@@ -157,7 +190,7 @@ namespace OneCoin
             
             for (uint i = BlockHeight; i > 0; i--)
             {
-                Block OneCoinBlock = Blockchain.GetBlock(i);
+                Block OneCoinBlock = Blockchain.GetBlock(i, NodeId);
 
                 if (OneCoinBlock.Timestamp < Transaction.Timestamp) { return false; }
 
