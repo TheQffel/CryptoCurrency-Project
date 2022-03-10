@@ -110,8 +110,8 @@ namespace OneCoin
                     if(MonitorMining)
                     {
                         Console.WriteLine("Lost connection to nodes, reconnecting...");
-                        Network.Broadcast(new[] { "Nodes", "List" });
                     }
+                    Network.SearchVerifiedNodes();
                 }
                 
                 Thread.Sleep(10000);
@@ -135,21 +135,29 @@ namespace OneCoin
             ulong[] TimestampDifferences = new ulong[10];
             bool CanBeChanged = true;
 
-            for (uint i = 0; i < 10; i++)
-            {
-                if(!Blockchain.BlockExists(CurrentBlock.BlockHeight - (i + 1))) { if(Program.DebugLogging) { Console.WriteLine("Cannot prepare to mine: Missing blocks!"); } return; }
-                
-                if(Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Difficulty != Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Difficulty && i != 9)
-                {
-                    CanBeChanged = false;
-                }
-                TimestampDifferences[i] = Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Timestamp - Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Timestamp;
-            }
             
-            if(CanBeChanged)
+            if(CurrentBlock.BlockHeight >= 10)
             {
-                if (TimestampDifferences.Max() < CurrentBlock.Difficulty || CurrentBlock.BlockHeight == 0 || CurrentBlock.BlockHeight == 1) { NextDifficulty++; }
-                if (TimestampDifferences.Min() > (ulong)CurrentBlock.Difficulty * (ulong)CurrentBlock.Difficulty) { NextDifficulty--; }
+                for (uint i = 0; i < 10; i++)
+                {
+                    if(!Blockchain.BlockExists(CurrentBlock.BlockHeight - (i + 1))) { if(Program.DebugLogging) { Console.WriteLine("Cannot prepare to mine: Missing blocks!"); } return; }
+                    
+                    if(Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Difficulty != Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Difficulty && i != 9)
+                    {
+                        CanBeChanged = false;
+                    }
+                    TimestampDifferences[i] = Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Timestamp - Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Timestamp;
+                }
+                
+                if(CanBeChanged)
+                {
+                    if (TimestampDifferences.Max() < CurrentBlock.Difficulty || CurrentBlock.BlockHeight == 0 || CurrentBlock.BlockHeight == 1) { NextDifficulty++; }
+                    if (TimestampDifferences.Min() > (ulong)CurrentBlock.Difficulty * (ulong)CurrentBlock.Difficulty) { NextDifficulty--; }
+                }
+            }
+            else
+            {
+                NextDifficulty = (byte)(CurrentBlock.BlockHeight+1);
             }
 
             ToBeMined = new Block[256];
@@ -295,7 +303,6 @@ namespace OneCoin
                     if (PauseMining || Blockchain.BlockExists(ToBeMined[Index].BlockHeight))
                     {
                         Thread.Sleep(100);
-                        Console.WriteLine("Mining Paused!");
                     }
                     else
                     {
@@ -371,7 +378,8 @@ namespace OneCoin
                     {
                         UdpClient Client = new UdpClient();
                         Client.Connect(PoolAddress, 10101);
-                        Network.Send(null, Client, BlockData);
+                        Task.Run(() => Network.Send(null, Client, BlockData));
+                        Thread.Sleep(100);
                         Client.Close();
                         Client.Dispose();
                     }
@@ -466,7 +474,7 @@ namespace OneCoin
             Console.WriteLine("F - Fix corrupted blocks.");
             Console.WriteLine("G - Generate blockchain checksum.");
             Console.WriteLine("H - Show mining hashrate.");
-            //Console.WriteLine("I - .");
+            Console.WriteLine("I - Incorrect transaction generator.");
             //Console.WriteLine("J - .");
             //Console.WriteLine("K - .");
             //Console.WriteLine("L - .");
@@ -564,6 +572,14 @@ namespace OneCoin
                         string[] Rates = GetHashrate();
                         Console.WriteLine("Your total speed of all threads is:");
                         Console.WriteLine(Rates[1] + " ≈ " + Rates[2] + " ≈ " + Rates[3]);
+                        break;
+                    }
+                    case ConsoleKey.I:
+                    {
+                        MonitorMining = false;
+                        Account.IncorrectTrancation();
+                        PrintControls();
+                        MonitorMining = true;
                         break;
                     }
                     case ConsoleKey.M:

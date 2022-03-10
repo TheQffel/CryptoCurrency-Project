@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Numerics;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace OneCoin
 {
@@ -121,8 +122,9 @@ namespace OneCoin
         {
             bool DeleteNow = false;
             uint TempHeight = CurrentHeight;
+            uint TempDelete = CurrentHeight;
 
-            for (uint i = 1; i < CurrentHeight; i++)
+            for (uint i = 1; i <= TempDelete; i++)
             {
                 if(!DeleteNow)
                 {
@@ -166,7 +168,7 @@ namespace OneCoin
                 {
                     if(Timeout % 10 == 0)
                     {
-                        Network.Send(Network.RandomClient(), null, new [] { "Block", "Get", i.ToString() } );
+                        Task.Run(() => Network.Send(Network.RandomClient(), null, new [] { "Block", "Get", i.ToString() } ));
                     }
                     
                     Thread.Sleep(10);
@@ -270,9 +272,9 @@ namespace OneCoin
         
         public static bool BlockExists(uint Height, long NodeId = -1)
         {
-            bool AvailableOnNodes = false;
+            bool AvailableOnNodes = Height == 0;
             if(NodeId > -1) { AvailableOnNodes = NodesChain[NodeId].ContainsKey(Height); }
-            return (BlocksInMemory.ContainsKey(Height) || File.Exists(Settings.BlockchainPath + Height + ".dat")) && CurrentHeight >= Height || AvailableOnNodes;
+            return (BlocksInMemory.ContainsKey(Height) || File.Exists(Settings.BlockchainPath + Height + ".dat")) || AvailableOnNodes;
         }
 
         public static uint LastBlockExists()
@@ -356,7 +358,7 @@ namespace OneCoin
         {
             Block OneBlock = null;
             
-            if(Height < 1)
+            if(Height == 0)
             {
                 OneBlock = new();
                 OneBlock.BlockHeight = Height;
@@ -367,7 +369,7 @@ namespace OneCoin
             byte Timeout = 0;
             while ((!File.Exists(Settings.BlockchainPath + Height + ".dat") || !File.Exists(Settings.TransactionsPath + Height + ".dat")) && Timeout++ < 100)
             {
-                Network.Send(Network.RandomClient(), null, new [] { "Block", "Get", Height.ToString() } );
+                Task.Run(() => Network.Send(Network.RandomClient(), null, new [] { "Block", "Get", Height.ToString() } ));
                 
                 Thread.Sleep(100);
             }

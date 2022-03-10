@@ -170,7 +170,7 @@ namespace OneCoin
                 }
             }
 
-            if (Difficulty != NextDifficulty) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong difficulty. Expected: " + NextDifficulty + ", Is: " + Difficulty); } }
+            if (Difficulty != NextDifficulty) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong difficulty."); } }
 
             Transaction MinerReward = new();
             MinerReward.From = Transactions[0].From;
@@ -181,9 +181,7 @@ namespace OneCoin
             MinerReward.Message = "";
             MinerReward.Signature = BlockHeight + "";
 
-            if (MinerReward.Hash() != Transactions[0].Hash()) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong miner reward hash."); } }
-            if (Transactions[0].From != "OneCoin") { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong miner from data."); } }
-            if (!Wallets.CheckAddressCorrect(Transactions[0].To)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong miner to data."); } }
+            if (MinerReward + "|" + MinerReward.Signature != Transactions[0] + "|" + Transactions[0].Signature) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong miner reward transaction."); } }
 
             ulong PreviousTransactionTimestamp = 1;
 
@@ -191,7 +189,7 @@ namespace OneCoin
             Dictionary<string, BigInteger> UserBalance = new();
             Dictionary<string, bool> SpecialTransaction = new();
             
-            if(Correct)
+            if(Correct || Transactions.Length > 1)
             {
                 for (int i = 1; i < Transactions.Length; i++)
                 {
@@ -218,8 +216,8 @@ namespace OneCoin
                     if (Transactions[i].Timestamp > Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
                     PreviousTransactionTimestamp = Transactions[i].Timestamp;
                     
-                    if(Transactions[i].To.Length != 88) { SpecialTransaction[Transactions[i].From] = true;  }
-                    if(Transactions[i].Signature.Length == 205) { SpecialTransaction[Transactions[i].From] = true;  }
+                    if(Transactions[i].To.Length != 88) { SpecialTransaction[Transactions[i].From] = true; }
+                    if(Transactions[i].Signature.Length == 205) { SpecialTransaction[Transactions[i].From] = true; }
                     if(SpecialTransaction[Transactions[i].From] && UserTransactions[Transactions[i].From] > 1) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Account data change with transactions."); } }
 
                     if (Wallets.CheckTransactionAlreadyIncluded(Transactions[i], NodeId, BlockHeight-1)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Already included."); } }

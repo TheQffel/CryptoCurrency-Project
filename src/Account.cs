@@ -5,6 +5,7 @@ using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -226,6 +227,136 @@ namespace OneCoin
             NewTransaction.GenerateSignature(PrivateKey);
             
             Network.Broadcast(new[] { "Transaction", NewTransaction.From, NewTransaction.To, NewTransaction.Amount.ToString(), NewTransaction.Fee.ToString(), NewTransaction.Timestamp.ToString(), NewTransaction.Message, NewTransaction.Signature });
+        }
+        
+        public static void IncorrectTrancation()
+        {
+            Console.WriteLine("This tool is used to create incorrect transaction");
+            Console.WriteLine("You can use it to check our wrong transaction detection system!");
+            Console.WriteLine("Create multiple transactions, then add it to block and check!");
+            
+            List<Transaction> Transactions = new List<Transaction>();
+
+            while(true)
+            {
+                try
+                {
+                    Console.WriteLine("\n");
+                    string[] TransactionNames = new string[Transactions.Count+1];
+                    for (int i = 1; i < TransactionNames.Length; i++)
+                    {
+                        TransactionNames[i] = Transactions[i-1].From.Substring(0, 10) + "... -> " + Transactions[i-1].To.Substring(0, 10) + "... : " + Transactions[i-1].Amount + " Ones";
+                    }
+                    TransactionNames[0] = "Exit / Add / Remove / Clear / Sort / Test";
+                    
+                    int UserChoice = Program.DisplayMenu(TransactionNames);
+                    
+                    if(UserChoice == 0)
+                    {
+                        UserChoice = Program.DisplayMenu(TransactionNames[0].Split(" / "));
+                        
+                        if(UserChoice == 0)
+                        {
+                            break;
+                        }
+                        if(UserChoice == 1)
+                        {
+                            string[] TransactionData = new string[7];
+                            Transaction NewTransaction = new();
+                            
+                            Console.Write("From (leave empty to use your account address): ");TransactionData[0] = Console.ReadLine();
+                            if(TransactionData[0].Length == 0) { TransactionData[0] = Wallets.AddressToShort(PublicKey); }
+                            NewTransaction.From = TransactionData[0];
+                            
+                            Console.Write("To (leave empty to use your account address): "); TransactionData[1] = Console.ReadLine();
+                            if(TransactionData[1].Length == 0) { TransactionData[1] = Wallets.AddressToShort(PublicKey); }
+                            NewTransaction.To = TransactionData[1];
+                            
+                            Console.Write("Amount (leave empty to use your balance): "); TransactionData[2] = Console.ReadLine();
+                            if(TransactionData[2].Length == 0) { TransactionData[2] = Wallets.GetBalance(TransactionData[0]).ToString(); }
+                            NewTransaction.Amount = BigInteger.Parse(TransactionData[2]);
+                            
+                            Console.Write("Fee (leave empty to not include miners fee): "); TransactionData[3] = Console.ReadLine();
+                            if(TransactionData[3].Length == 0) { TransactionData[3] = "0"; }
+                            NewTransaction.Fee = ulong.Parse(TransactionData[3]);
+                            
+                            Console.Write("Timestamp (leave empty use current timestamp): "); TransactionData[4] = Console.ReadLine();
+                            if(TransactionData[4].Length == 0) { TransactionData[4] = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds().ToString(); }
+                            NewTransaction.Timestamp = ulong.Parse(TransactionData[4]);
+                            
+                            Console.Write("Message (leave empty to not use message): "); TransactionData[5] = Console.ReadLine();
+                            if(TransactionData[5].Length == 0) { TransactionData[5] = null; }
+                            NewTransaction.Message = TransactionData[5];
+                            
+                            Console.Write("Signature (leave empty to generate from key): "); TransactionData[6] = Console.ReadLine();
+                            if(TransactionData[6].Length == 0) { TransactionData[6] = null; }
+                            NewTransaction.Signature = TransactionData[6];
+                            
+                            if(NewTransaction.Signature == null)
+                            {
+                                NewTransaction.GenerateSignature(PrivateKey);
+                            }
+                            Transactions.Add(NewTransaction);
+                            Console.WriteLine("Transaction added!");
+                        }
+                        if(UserChoice == 2)
+                        {
+                            TransactionNames[0] = "Cancel";
+                            int Temp = Program.DisplayMenu(TransactionNames);
+                            if(Temp != 0)
+                            {
+                                Transactions.RemoveAt(Temp - 1);
+                                Console.WriteLine("Transaction removed!");
+                            }
+                        }
+                        if(UserChoice == 3)
+                        {
+                            Transactions = new List<Transaction>();
+                            Console.WriteLine("Cleared transaction list!");
+                        }
+                        if(UserChoice == 4)
+                        {
+                            Transactions.Sort((x, y) => x.Timestamp.CompareTo(y.Timestamp));
+                            Console.WriteLine("Sorted transactions by time!");
+                        }
+                        if(UserChoice == 5)
+                        {
+                            bool Temp = Program.DebugLogging;
+                            Program.DebugLogging = true;
+                            Console.WriteLine("Test results:");
+                            Console.WriteLine("");
+                            Block ToTest = Blockchain.GetBlock(Blockchain.CurrentHeight);
+                            ToTest.Transactions = new[] { ToTest.Transactions[0] }.Concat(Transactions).ToArray();
+                            ToTest.CheckBlockCorrect();
+                            Console.WriteLine("");
+                            Console.WriteLine("If you dont see any error, that means all transactions are correct!");
+                            Console.WriteLine("Look only for lines started like \"Transaction is incorrect...\".");
+                            Console.WriteLine("Ignore all lines started like \"Block is incorrect...\".");
+                            Console.WriteLine("Press any key to continue...");
+                            Program.DebugLogging = Temp;
+                            Console.ReadKey();
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("Transaction information:");
+                        Console.WriteLine("From: " + Transactions[UserChoice-1].From);
+                        Console.WriteLine("To: " + Transactions[UserChoice-1].To);
+                        Console.WriteLine("Amount: " + Transactions[UserChoice-1].Amount);
+                        Console.WriteLine("Fee: " + Transactions[UserChoice-1].Fee);
+                        Console.WriteLine("Timestamp: " + Transactions[UserChoice-1].Timestamp);
+                        Console.WriteLine("Message: " + Transactions[UserChoice-1].Message);
+                        Console.WriteLine("Signature: " + Transactions[UserChoice-1].Signature);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
+            }
+            
+            
+            
         }
 
         public static void Menu()

@@ -263,7 +263,8 @@ namespace OneCoin
                                 DebugLogging = true;
                                 UdpClient Node = new();
                                 Node.Connect(IPAddress.Parse(Arguments[1]), 10101);
-                                Network.Send(null, Node, Arguments.Skip(2).ToArray());
+                                Task.Run(() => Network.Send(null, Node, Arguments.Skip(2).ToArray()));
+                                Thread.Sleep(1000);
                             }
                             else
                             {

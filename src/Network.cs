@@ -17,6 +17,7 @@ namespace OneCoin
         public static bool[] IsListening = new bool[256];
 
         public static string[] VerifiedNodes = Array.Empty<string>();
+        public static Dictionary<long, bool> NodesTransmission = new();
 
         public static void ListenForPackets()
         {
@@ -67,33 +68,46 @@ namespace OneCoin
 
         public static void Send(TcpClient TcpClient, UdpClient UdpClient, string[] Messages)
         {
-            try
+            long NodeId = NodeToId(TcpClient, UdpClient);
+            if(!NodesTransmission.ContainsKey(NodeId))
             {
-                string Message = "";
-                for (int i = 0; i < Messages.Length; i++)
+                NodesTransmission[NodeId] = false;
+            }
+            
+            if(!NodesTransmission[NodeId])
+            {
+                NodesTransmission[NodeId] = true;
+                
+                try
                 {
-                    Message += "~" + Messages[i];
-                }
-                if (TcpClient != null)
-                {
-                    if (TcpClient.Connected)
+                    string Message = "";
+                    for (int i = 0; i < Messages.Length; i++)
                     {
-                        NetworkStream Stream = TcpClient.GetStream();
-                        Stream.Write(Encoding.UTF8.GetBytes(Message[1..]).Concat(new byte[] { 4 }).ToArray());
+                        Message += "~" + Messages[i];
+                    }
+                    if (TcpClient != null)
+                    {
+                        if (TcpClient.Connected)
+                        {
+                            NetworkStream Stream = TcpClient.GetStream();
+                            Stream.Write(Encoding.UTF8.GetBytes(Message[1..]).Concat(new byte[] { 4 }).ToArray());
+                        }
+                    }
+                    if (UdpClient != null)
+                    {
+                        byte[] Data = Encoding.UTF8.GetBytes(Message[1..]);
+                        UdpClient.Send(Data, Data.Length);
                     }
                 }
-                if (UdpClient != null)
+                catch (Exception Ex)
                 {
-                    byte[] Data = Encoding.UTF8.GetBytes(Message[1..]);
-                    UdpClient.Send(Data, Data.Length);
+                    if (Program.DebugLogging)
+                    {
+                        Console.WriteLine(Ex);
+                    }
                 }
-            }
-            catch (Exception Ex)
-            {
-                if (Program.DebugLogging)
-                {
-                    Console.WriteLine(Ex);
-                }
+                
+                NodesTransmission[NodeId] = false;
             }
         }
 
@@ -109,7 +123,8 @@ namespace OneCoin
                         {
                             if (Peers[i] != Exclude)
                             {
-                                Send(Peers[i], null, Messages);
+                                Task Transmission = Task.Run(() => Send(Peers[i], null, Messages));
+                                while((byte)Transmission.Status < 3) { Thread.Sleep(1); }
                             }
                         }
                         else
@@ -131,8 +146,7 @@ namespace OneCoin
         public static void Recieve(TcpClient Client, bool Listening)
         {
             string Peer = ((IPEndPoint)Client.Client.RemoteEndPoint).Address.MapToIPv4() + ":" + ((IPEndPoint)Client.Client.RemoteEndPoint).Port;
-            long NodeId = BitConverter.ToUInt32(((IPEndPoint)Client.Client.RemoteEndPoint).Address.MapToIPv4().GetAddressBytes(), 0);
-            NodeId <<= 16; NodeId += ((IPEndPoint)Client.Client.RemoteEndPoint).Port;
+            long NodeId = NodeToId(Client, null);
             
             if(Program.DebugLogging)
             {
@@ -352,8 +366,8 @@ namespace OneCoin
 
             return Nodes.ToArray();
         }
-
-        public static void Action(TcpClient TcpClient, UdpClient UdpClient, string[] Messages)
+        
+        public static long NodeToId(TcpClient TcpClient, UdpClient UdpClient)
         {
             long NodeId = -1;
             
@@ -369,6 +383,13 @@ namespace OneCoin
                 NodeId <<= 16;
                 NodeId += ((IPEndPoint)TcpClient.Client.RemoteEndPoint).Port;
             }
+            
+            return NodeId;
+        }
+
+        public static void Action(TcpClient TcpClient, UdpClient UdpClient, string[] Messages)
+        {
+            long NodeId = NodeToId(TcpClient, UdpClient);
 
             switch (Messages[0].ToLower())
             {
@@ -378,7 +399,7 @@ namespace OneCoin
                     {
                         if (Messages[1].ToLower() == "list")
                         {
-                            Send(TcpClient, UdpClient, new [] { "Nodes", "Response" }.Concat(ConnectedNodesAddresses()).ToArray() );
+                            Task.Run(() => Send(TcpClient, UdpClient, new [] { "Nodes", "Response" }.Concat(ConnectedNodesAddresses()).ToArray() ));
                         }
                         if (Messages[1].ToLower() == "response")
                         {
@@ -426,7 +447,7 @@ namespace OneCoin
                                         BlockData[14 + i * 7] = OldBlock.Transactions[i].Message;
                                         BlockData[15 + i * 7] = OldBlock.Transactions[i].Signature;
                                     }
-                                    Send(TcpClient, UdpClient, BlockData);
+                                    Task.Run(() => Send(TcpClient, UdpClient, BlockData));
                                 }
                             }
                         }
@@ -503,7 +524,7 @@ namespace OneCoin
                                             
                                             if(Missing > 0)
                                             {
-                                                Send(TcpClient,  UdpClient, new[] { "Block", "Get", Missing.ToString() });
+                                                Task.Run(() => Send(TcpClient,  UdpClient, new[] { "Block", "Get", Missing.ToString() }));
                                             }
                                             else
                                             {
@@ -606,7 +627,7 @@ namespace OneCoin
                         {
                             if (Messages[2].ToLower() == "get")
                             {
-                                Send(TcpClient, UdpClient, new[] { "Account", "Info", "Set", Wallets.GetBalance(Messages[3]).ToString(), Wallets.GetName(Messages[3]), Wallets.GetAvatar(Messages[3])});
+                                Task.Run(() => Send(TcpClient, UdpClient, new[] { "Account", "Info", "Set", Wallets.GetBalance(Messages[3]).ToString(), Wallets.GetName(Messages[3]), Wallets.GetAvatar(Messages[3])}));
                             }
                         }
                         if (Messages[1].ToLower() == "search")
@@ -615,7 +636,7 @@ namespace OneCoin
                             {
                                 if (Messages[3].ToLower() == "nickname")
                                 {
-                                    Send(TcpClient, UdpClient, new[] { "Account", "Search", "Result", "Nickname", Messages[4], Messages[5], Wallets.GetAddress(Messages[4], byte.Parse(Messages[5]))});
+                                    Task.Run(() => Send(TcpClient, UdpClient, new[] { "Account", "Search", "Result", "Nickname", Messages[4], Messages[5], Wallets.GetAddress(Messages[4], byte.Parse(Messages[5]))}));
                                 }
                             }
                         }
@@ -630,7 +651,7 @@ namespace OneCoin
                         {
                             if (Messages[2].ToLower() == "get")
                             {
-                                Send(TcpClient, UdpClient, new[] { "Service", "Info", "Set", Messages[3], Wallets.GetName(Messages[3]), Wallets.GetAvatar(Messages[3]) });
+                                Task.Run(() => Send(TcpClient, UdpClient, new[] { "Service", "Info", "Set", Messages[3], Wallets.GetName(Messages[3]), Wallets.GetAvatar(Messages[3]) }));
                             }
                         }
                     }
