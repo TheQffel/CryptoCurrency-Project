@@ -47,44 +47,44 @@ namespace OneCoin
             Signature = Wallets.GenerateSignature(Key, ToString());
         }
         
-        public bool CheckTransactionCorrect(BigInteger Balance, uint Height, long NodeId = -1)
+        public bool CheckTransactionCorrect(BigInteger Balance, uint Height, long NodeId = -1, string TransactionName = "Unknown")
         {
-            bool Correct = From != To; if(Program.DebugLogging && !Correct) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Addresses are the same!"); } 
-            if(Fee > 1000000000000000000) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Too high fee!"); } }
-            if(Fee >= Amount) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Fee higher than amount!"); } }
-            if (Amount < 1) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Amount less than 1"); } }
-            if (Balance < Amount + Fee) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Not enough balance!"); } }
+            bool Correct = From != To; if(Program.DebugLogging && !Correct) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Addresses are the same!"); } 
+            if(Fee > 1000000000000000000) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Too high fee!"); } }
+            if(Fee >= Amount) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Fee higher than amount!"); } }
+            if (Amount < 1) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Amount less than 1"); } }
+            if (Balance < Amount + Fee) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Not enough balance!"); } }
             if(Message == null) { Message = ""; }
             
-            if (!Hashing.CheckStringFormat(Message, 5, 0, 256)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Message contains invalid characters!"); } }
-            if (!Wallets.CheckAddressCorrect(From)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: From address is incorrect!"); } }
+            if (!Hashing.CheckStringFormat(Message, 5, 0, 256)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Message contains invalid characters!"); } }
+            if (!Wallets.CheckAddressCorrect(From)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: From address is incorrect!"); } }
             if (!Wallets.CheckAddressCorrect(To))
             {
                 if (Hashing.CheckStringFormat(To, 5, 4, 24))
                 {
-                    if (Amount != BigInteger.Pow(2, 24 - To.Length)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Wrong nickname price!"); } }
-                    if (Message != null) { if(Message.Length > 0) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Nickname cannot contain message!"); } }}
+                    if (Amount != BigInteger.Pow(2, 24 - To.Length)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Wrong nickname price!"); } }
+                    if (Message != null) { if(Message.Length > 0) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Nickname cannot contain message!"); } }}
                 }
                 else if (Hashing.CheckStringFormat(To, 5, 128, 1048576))
                 {
-                    if (Amount != To.Length) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Wrong avatar price!"); } }
-                    if (!Media.ImageDataCorrect(To)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Image is incorrect!"); } }
-                    if (Message != null) { if(Message.Length > 0) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Avatar cannot contain message!"); } }}
+                    if (Amount != To.Length) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Wrong avatar price!"); } }
+                    if (!Media.ImageDataCorrect(To)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Image is incorrect!"); } }
+                    if (Message != null) { if(Message.Length > 0) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Avatar cannot contain message!"); } }}
                 }
-                else { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: To address is incorrect!"); } }
+                else { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: To address is incorrect!"); } }
             }
 
             if(Signature.Length != 205)
             {
-                if (!VerifySignature()) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Wrong signature!"); } }
+                if (!VerifySignature()) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Wrong signature!"); } }
             }
             else
             {
-                if(Hashing.TqHash(ToString()) != Signature) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Signature not match hash!"); } }
+                if(Hashing.TqHash(ToString()) != Signature) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Signature not match hash!"); } }
                 uint Inactivity = Height + 1 - Wallets.GetLastUsedBlock(From, NodeId, Height);
                 int Difficulty = 250 - (int)(Inactivity / 100000);
                 if(Difficulty < 1) { Difficulty = 1; }
-                if(!Mining.CheckSolution(Signature, (byte)Difficulty)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + Signature[..5] + Signature[^5..] + " is incorrect: Solution not good enough!"); } }
+                if(!Mining.CheckSolution(Signature, (byte)Difficulty)) { Correct = false; if(Program.DebugLogging) { Console.WriteLine("Transaction " + TransactionName + " is incorrect: Solution not good enough!"); } }
             }
 
             return Correct;

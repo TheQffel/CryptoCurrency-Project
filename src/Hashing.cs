@@ -135,14 +135,19 @@ namespace OneCoin
             return Result;
         }
 
-        public static string BytesToHex(byte[] data)
+        public static string BytesToHex(byte[] Data)
         {
-            return string.Concat(data.Select(x => x.ToString("x2")));
+            return string.Concat(Data.Select(x => x.ToString("x2")));
         }
 
-        public static byte[] HexToBytes(string hex)
+        public static byte[] HexToBytes(string HexString)
         {
-            return Enumerable.Range(0, hex.Length).Where(x => x % 2 == 0).Select(x => Convert.ToByte(hex.Substring(x, 2), 16)).ToArray();
+            HexString = HexString.ToLower();
+            if(CheckStringFormat(HexString, 2, 0, int.MaxValue))
+            {
+                return Enumerable.Range(0, HexString.Length).Where(x => x % 2 == 0).Select(x => Convert.ToByte(HexString.Substring(x, 2), 16)).ToArray();
+            }
+            return null;
         }
 
         public static bool CheckStringFormat(string Text, byte Mode, int Min, int Max)

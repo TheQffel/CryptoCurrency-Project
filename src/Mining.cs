@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
@@ -16,6 +15,7 @@ namespace OneCoin
         public static string MiningAddress = "";
         public static string PoolAddress = "";
         public static bool MonitorMining = false;
+        public static byte ThreadsCount = (byte)Environment.ProcessorCount;
 
         public static List<Transaction> PendingTransactions = new();
         public static Transaction MinerReward = new();
@@ -33,13 +33,16 @@ namespace OneCoin
         public static int[] SolutionsStats = new int[24];
         public static byte CurrentHour = 111;
 
-        public static string[] GetHashrate()
+        public static string[] GetHashrate(bool Reset = false)
         {
             string[] Hashrates = new string[5];
             Hashrates[0] = ValidHashes + " Hashes";
             double PerSecond = TotalHashes / (DateTime.Now - LastReset).TotalSeconds;
-            LastReset = DateTime.Now;
-            TotalHashes = 0;
+            if(Reset)
+            {
+                LastReset = DateTime.Now;
+                TotalHashes = 0;
+            }
             Hashrates[1] = Math.Round(PerSecond, 0) + " H/s";
             PerSecond *= 0.001;
             Hashrates[2] = Math.Round(PerSecond, 1) + " KH/s";
@@ -71,16 +74,14 @@ namespace OneCoin
         {
             uint HashesChange = 0;
             byte Timeout = 0;
+            byte NodeSearch = 0;
             
             while (true)
             {
+                CurrentHour = (byte)DateTime.Now.Hour;
+
                 if(KeepMining)
                 {
-                    CurrentHour = (byte)DateTime.Now.Hour;
-                    
-                    Statistics.Update();
-                    Discord.UpdateService();
-
                     if(HashesChange != TotalHashes)
                     {
                         HashesChange = TotalHashes;
@@ -94,24 +95,31 @@ namespace OneCoin
                             Console.WriteLine("Detected out of sync! Restarting miner...");
                         }
                         
-                        StartOrStop((byte)Environment.ProcessorCount);
+                        KeepMining = false;
                         Thread.Sleep(500);
                         Blockchain.FixCorruptedBlocks();
                         PrepareToMining(Blockchain.GetBlock(Blockchain.CurrentHeight));
                         Thread.Sleep(500);
-                        StartOrStop((byte)Environment.ProcessorCount);
+                        StartOrStop(ThreadsCount);
                         
                         Timeout = 1;
                     }
+                    
+                    Statistics.Update();
+                    Discord.UpdateService();
                 }
                 
-                if(Network.ConnectedNodes() < 2)
+                if(Network.ConnectedNodes(true) < 4)
                 {
-                    if(MonitorMining)
+                    if(NodeSearch++ > 100)
                     {
-                        Console.WriteLine("Lost connection to nodes, reconnecting...");
+                        if(MonitorMining)
+                        {
+                            Console.WriteLine("Lost connection to nodes, reconnecting...");
+                        }
+                        Network.SearchVerifiedNodes();
+                        NodeSearch = 0;
                     }
-                    Network.SearchVerifiedNodes();
                 }
                 
                 Thread.Sleep(10000);
@@ -120,19 +128,13 @@ namespace OneCoin
         
         public static void PrepareToMining(Block CurrentBlock, byte CustomDifficulty = 0)
         {
-            if(CurrentHour > 99)
-            {
-                Task.Run(() => MiningWatchdog());
-                Thread.Sleep(1000);
-            }
-            
             PauseMining = true;
             Thread.Sleep(100);
 
             if (Program.DebugLogging) { Console.WriteLine("Preparing to mine: " + (CurrentBlock.BlockHeight + 1)); }
             
             byte NextDifficulty = CurrentBlock.Difficulty;
-            ulong[] TimestampDifferences = new ulong[10];
+            ulong TimestampDifferences = 5;;
             bool CanBeChanged = true;
 
             
@@ -146,13 +148,15 @@ namespace OneCoin
                     {
                         CanBeChanged = false;
                     }
-                    TimestampDifferences[i] = Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Timestamp - Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Timestamp;
+                    TimestampDifferences += (Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Timestamp - Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Timestamp);
                 }
                 
                 if(CanBeChanged)
                 {
-                    if (TimestampDifferences.Max() < CurrentBlock.Difficulty || CurrentBlock.BlockHeight == 0 || CurrentBlock.BlockHeight == 1) { NextDifficulty++; }
-                    if (TimestampDifferences.Min() > (ulong)CurrentBlock.Difficulty * (ulong)CurrentBlock.Difficulty) { NextDifficulty--; }
+                    TimestampDifferences /= 10;
+                    
+                    if (TimestampDifferences < CurrentBlock.Difficulty || CurrentBlock.BlockHeight == 0 || CurrentBlock.BlockHeight == 1) { NextDifficulty++; }
+                    if (TimestampDifferences > (ulong)CurrentBlock.Difficulty * (ulong)CurrentBlock.Difficulty) { NextDifficulty--; }
                 }
             }
             else
@@ -205,6 +209,7 @@ namespace OneCoin
                     Dictionary<string, byte> UserTransactions = new();
                     Dictionary<string, BigInteger> UserBalance = new();
                     Dictionary<string, bool> SpecialTransaction = new();
+                    List<string> AlreadyAddedTransactions = new();
 
                     for (int i = 0; i < PendingTransactions.Count; i++)
                     {
@@ -225,19 +230,23 @@ namespace OneCoin
                                 {
                                     if (UserTransactions[PendingTransactions[i].From] < Blockchain.GetBlock(Blockchain.CurrentHeight).Difficulty)
                                     {
-                                        if(PendingTransactions[i].To.Length == 88 && !SpecialTransaction[PendingTransactions[i].From])
+                                        if (!AlreadyAddedTransactions.Contains(Transactions[i].Signature))
                                         {
-                                            UserBalance[PendingTransactions[i].From] -= PendingTransactions[i].Amount;
-                                            UserTransactions[PendingTransactions[i].From]++;
-                                            Transactions.Add(PendingTransactions[i]);
+                                            if(PendingTransactions[i].To.Length == 88 && !SpecialTransaction[PendingTransactions[i].From])
+                                            {
+                                                UserBalance[PendingTransactions[i].From] -= PendingTransactions[i].Amount;
+                                                UserTransactions[PendingTransactions[i].From]++;
+                                                Transactions.Add(PendingTransactions[i]);
+                                            }
+                                            if((PendingTransactions[i].Signature.Length == 205 || PendingTransactions[i].To.Length != 88) && UserTransactions[PendingTransactions[i].From] == 0)
+                                            {
+                                                UserBalance[PendingTransactions[i].From] -= PendingTransactions[i].Amount;
+                                                SpecialTransaction[PendingTransactions[i].From] = true;
+                                                UserTransactions[PendingTransactions[i].From]++;
+                                                Transactions.Add(PendingTransactions[i]);
+                                            }
                                         }
-                                        if((PendingTransactions[i].Signature.Length == 205 || PendingTransactions[i].To.Length != 88) && UserTransactions[PendingTransactions[i].From] == 0)
-                                        {
-                                            UserBalance[PendingTransactions[i].From] -= PendingTransactions[i].Amount;
-                                            SpecialTransaction[PendingTransactions[i].From] = true;
-                                            UserTransactions[PendingTransactions[i].From]++;
-                                            Transactions.Add(PendingTransactions[i]);
-                                        }
+                                        AlreadyAddedTransactions.Add(Transactions[i].Signature);
                                     }
                                     RemoveThis[i] = false;
                                 }
@@ -387,7 +396,7 @@ namespace OneCoin
                     if(MonitorMining)
                     {
                         Thread.Sleep(1000);
-                        string[] Rates = GetHashrate();
+                        string[] Rates = GetHashrate(true);
                         string[] Memories = GetMemories();
                         string Balance = Wallets.GetBalance(MiningAddress).ToString();
                         Balance = "0." + new string('0', 24 - Balance.Length) + Balance + " ①";
@@ -485,7 +494,7 @@ namespace OneCoin
             //Console.WriteLine("Q - .");
             //Console.WriteLine("R - .");
             Console.WriteLine("S - Start or stop mining.");
-            Console.WriteLine("T - Show threads count.");
+            Console.WriteLine("T - Change threads count.");
             //Console.WriteLine("U - .");
             //Console.WriteLine("V - .");
             //Console.WriteLine("W - .");
@@ -569,7 +578,7 @@ namespace OneCoin
                     }
                     case ConsoleKey.H:
                     {
-                        string[] Rates = GetHashrate();
+                        string[] Rates = GetHashrate(true);
                         Console.WriteLine("Your total speed of all threads is:");
                         Console.WriteLine(Rates[1] + " ≈ " + Rates[2] + " ≈ " + Rates[3]);
                         break;
@@ -577,7 +586,7 @@ namespace OneCoin
                     case ConsoleKey.I:
                     {
                         MonitorMining = false;
-                        Account.IncorrectTrancation();
+                        Account.IncorrectTransaction();
                         PrintControls();
                         MonitorMining = true;
                         break;
@@ -598,12 +607,23 @@ namespace OneCoin
                     }
                     case ConsoleKey.S:
                     {
-                        StartOrStop((byte)Environment.ProcessorCount);
+                        StartOrStop(ThreadsCount);
                         break;
                     }
                     case ConsoleKey.T:
                     {
-                        Console.WriteLine("You are mining on " + Environment.ProcessorCount + " threads.");
+                        KeepMining = false;
+                        Thread.Sleep(1000);
+                        Console.Write("Enter number of threads (type 0 to exit): ");
+                        if(ushort.TryParse(Console.ReadLine(), out ushort TempNumber))
+                        {
+                            if(TempNumber != 0)
+                            {
+                                if(TempNumber > 255) { TempNumber = 255; }
+                                ThreadsCount = (byte)TempNumber;
+                            }
+                        }
+                        StartOrStop(ThreadsCount);
                         break;
                     }
                     case ConsoleKey.X:

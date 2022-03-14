@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 
@@ -120,7 +119,7 @@ namespace OneCoin
             // 7: Base64 (Spaces, Separators)
 
             if (BlockHeight == 0) { return true; }
-            if (BlockHeight == 1) { return Transactions.Length > 0; }
+            if (BlockHeight == 1) { if(Transactions.Length > 0) { return Transactions[0].Amount == Wallets.MinerRewards[0]; } }
 
             for (uint i = BlockHeight - 1; i + 10 >= BlockHeight && i != 0; i--)
             {
@@ -151,7 +150,7 @@ namespace OneCoin
             if (BlockHeight < 11) { NextDifficulty = (byte)BlockHeight; }
             else
             {
-                ulong[] TimestampDifferences = new ulong[10];
+                ulong TimestampDifferences = 5;
                 bool CanBeChanged = true;
                 
                 for (uint i = 0; i < 10; i++)
@@ -160,17 +159,19 @@ namespace OneCoin
                     {
                         CanBeChanged = false;
                     }
-                    TimestampDifferences[i] = Blockchain.GetBlock(BlockHeight - (i + 1), NodeId).Timestamp - Blockchain.GetBlock(BlockHeight - (i + 2), NodeId).Timestamp;
+                    TimestampDifferences += (Blockchain.GetBlock(BlockHeight - (i + 1), NodeId).Timestamp - Blockchain.GetBlock(BlockHeight - (i + 2), NodeId).Timestamp);
                 }
                 
                 if(CanBeChanged)
                 {
-                    if (TimestampDifferences.Max() < PreviousBlock.Difficulty) { NextDifficulty++; }
-                    if (TimestampDifferences.Min() > (ulong)PreviousBlock.Difficulty * (ulong)PreviousBlock.Difficulty) { NextDifficulty--; }
+                    TimestampDifferences /= 10;
+                    
+                    if (TimestampDifferences < PreviousBlock.Difficulty) { NextDifficulty++; }
+                    if (TimestampDifferences > (ulong)PreviousBlock.Difficulty * (ulong)PreviousBlock.Difficulty) { NextDifficulty--; }
                 }
             }
 
-            if (Difficulty != NextDifficulty) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong difficulty."); } }
+            if (Difficulty != NextDifficulty) { Correct = false; if (Program.DebugLogging & Difficulty > 5) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong difficulty."); } }
 
             Transaction MinerReward = new();
             MinerReward.From = Transactions[0].From;
@@ -188,40 +189,40 @@ namespace OneCoin
             Dictionary<string, byte> UserTransactions = new();
             Dictionary<string, BigInteger> UserBalance = new();
             Dictionary<string, bool> SpecialTransaction = new();
-            
-            if(Correct || Transactions.Length > 1)
+            List<string> AlreadyCheckedTransactions = new();
+
+            for (int i = 1; i < Transactions.Length; i++)
             {
-                for (int i = 1; i < Transactions.Length; i++)
+                bool A = Transactions[i].To.Length <= 25 && BlockHeight < 1000; // Unlock nicknames at 1k
+                bool B = Transactions[i].To.Length >= 99 && BlockHeight < 10000; // Unlock avatars at 10k
+                bool C = Transactions[i].To.Length == 88 && BlockHeight < 100000; // Unlock transactions at 100k
+                bool D = Transactions[i].Fee > 0 && BlockHeight < 1000000; // No fee for transactions to 1M
+                
+                if(A || B || C || D) { Correct = false; }
+                
+                if (!UserTransactions.ContainsKey(Transactions[i].From))
                 {
-                    bool A = Transactions[i].To.Length <= 25 && BlockHeight < 1000; // Unlock nicknames at 1k
-                    bool B = Transactions[i].To.Length >= 99 && BlockHeight < 10000; // Unlock avatars at 10k
-                    bool C = Transactions[i].To.Length == 88 && BlockHeight < 100000; // Unlock transactions at 100k
-                    bool D = Transactions[i].Fee > 0 && BlockHeight < 1000000; // No fee for transactions to 1M
-                    
-                    if(A || B || C || D) { Console.WriteLine("Block " + BlockHeight + " contains locked actions."); return false; }
-                    
-                    if (!UserTransactions.ContainsKey(Transactions[i].From))
-                    {
-                        UserTransactions[Transactions[i].From] = 0;
-                        UserBalance[Transactions[i].From] = Wallets.GetBalance(Transactions[i].From, NodeId, BlockHeight - 1);
-                        SpecialTransaction[Transactions[i].From] = false;
-                    }
-                    UserTransactions[Transactions[i].From]++;
-                    if (UserTransactions[Transactions[i].From] > Difficulty) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Too much transactions."); } }
-                    if (!Transactions[i].CheckTransactionCorrect(UserBalance[Transactions[i].From], BlockHeight, NodeId)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong transaction."); } }
-                    UserBalance[Transactions[i].From] -= Transactions[i].Amount;
-
-                    if (Transactions[i].Timestamp + 1000000 < Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
-                    if (Transactions[i].Timestamp < PreviousTransactionTimestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
-                    if (Transactions[i].Timestamp > Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
-                    PreviousTransactionTimestamp = Transactions[i].Timestamp;
-                    
-                    if(Transactions[i].To.Length != 88) { SpecialTransaction[Transactions[i].From] = true; }
-                    if(Transactions[i].Signature.Length == 205) { SpecialTransaction[Transactions[i].From] = true; }
-                    if(SpecialTransaction[Transactions[i].From] && UserTransactions[Transactions[i].From] > 1) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Account data change with transactions."); } }
-
-                    if (Wallets.CheckTransactionAlreadyIncluded(Transactions[i], NodeId, BlockHeight-1)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Already included."); } }
+                    UserTransactions[Transactions[i].From] = 0;
+                    UserBalance[Transactions[i].From] = Wallets.GetBalance(Transactions[i].From, NodeId, BlockHeight - 1);
+                    SpecialTransaction[Transactions[i].From] = false;
                 }
+                UserTransactions[Transactions[i].From]++;
+                if (UserTransactions[Transactions[i].From] > Difficulty) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Too much transactions."); } }
+                if (!Transactions[i].CheckTransactionCorrect(UserBalance[Transactions[i].From], BlockHeight, NodeId, i + " in " + BlockHeight)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong transaction."); } }
+                UserBalance[Transactions[i].From] -= Transactions[i].Amount;
+
+                if (Transactions[i].Timestamp + 1000000 < Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
+                if (Transactions[i].Timestamp < PreviousTransactionTimestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
+                if (Transactions[i].Timestamp > Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Wrong timestamp."); } }
+                PreviousTransactionTimestamp = Transactions[i].Timestamp;
+                
+                if(Transactions[i].To.Length != 88) { SpecialTransaction[Transactions[i].From] = true; }
+                if(Transactions[i].Signature.Length == 205) { SpecialTransaction[Transactions[i].From] = true; }
+                if(SpecialTransaction[Transactions[i].From] && UserTransactions[Transactions[i].From] > 1) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Account data change with transactions."); } }
+
+                if (AlreadyCheckedTransactions.Contains(Transactions[i].Signature)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Already included in this block."); } }
+                if (Wallets.CheckTransactionAlreadyIncluded(Transactions[i], NodeId, BlockHeight-1)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Transaction " + i + " in " + BlockHeight + " is incorrect: Already included in previous blocks."); } }
+                AlreadyCheckedTransactions.Add(Transactions[i].Signature);
             }
 
             return Correct;

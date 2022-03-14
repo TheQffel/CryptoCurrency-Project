@@ -229,9 +229,9 @@ namespace OneCoin
             Network.Broadcast(new[] { "Transaction", NewTransaction.From, NewTransaction.To, NewTransaction.Amount.ToString(), NewTransaction.Fee.ToString(), NewTransaction.Timestamp.ToString(), NewTransaction.Message, NewTransaction.Signature });
         }
         
-        public static void IncorrectTrancation()
+        public static void IncorrectTransaction()
         {
-            Console.WriteLine("This tool is used to create incorrect transaction");
+            Console.WriteLine("This tool is used to create incorrect transaction.");
             Console.WriteLine("You can use it to check our wrong transaction detection system!");
             Console.WriteLine("Create multiple transactions, then add it to block and check!");
             
@@ -245,7 +245,11 @@ namespace OneCoin
                     string[] TransactionNames = new string[Transactions.Count+1];
                     for (int i = 1; i < TransactionNames.Length; i++)
                     {
-                        TransactionNames[i] = Transactions[i-1].From.Substring(0, 10) + "... -> " + Transactions[i-1].To.Substring(0, 10) + "... : " + Transactions[i-1].Amount + " Ones";
+                        string FromAddress = Transactions[i-1].From;
+                        string ToAddress = Transactions[i-1].To;
+                        if(FromAddress.Length > 25) { FromAddress = FromAddress[..10] + "..." + FromAddress[^10..]; }
+                        if(ToAddress.Length > 25) { ToAddress = ToAddress[..10] + "..." + ToAddress[^10..]; }
+                        TransactionNames[i] = FromAddress + " -> " + ToAddress + ": " + Transactions[i-1].Amount + " Ones";
                     }
                     TransactionNames[0] = "Exit / Add / Remove / Clear / Sort / Test";
                     
@@ -325,13 +329,25 @@ namespace OneCoin
                             Program.DebugLogging = true;
                             Console.WriteLine("Test results:");
                             Console.WriteLine("");
-                            Block ToTest = Blockchain.GetBlock(Blockchain.CurrentHeight);
-                            ToTest.Transactions = new[] { ToTest.Transactions[0] }.Concat(Transactions).ToArray();
+                            Block OriginalBlock = Blockchain.GetBlock(Blockchain.CurrentHeight);
+                            Block ToTest = new Block();
+                            ToTest.BlockHeight = OriginalBlock.BlockHeight + 1;
+                            ToTest.PreviousHash = OriginalBlock.CurrentHash;
+                            ToTest.Timestamp = (ulong)(new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds() + 1);
+                            ToTest.Difficulty = 5;
+                            ToTest.ExtraData = OriginalBlock.ExtraData;
+                            Transaction MinerReward = new();
+                            MinerReward.From = Transactions[0].From;
+                            MinerReward.To = Transactions[0].To;
+                            MinerReward.Amount = Wallets.MinerRewards[(ToTest.BlockHeight-1)/1000000];
+                            MinerReward.Fee = 0;
+                            MinerReward.Timestamp = ToTest.BlockHeight;
+                            MinerReward.Message = "";
+                            MinerReward.Signature = ToTest.BlockHeight + "";
+                            ToTest.Transactions = new[] { MinerReward }.Concat(Transactions).ToArray();
                             ToTest.CheckBlockCorrect();
                             Console.WriteLine("");
                             Console.WriteLine("If you dont see any error, that means all transactions are correct!");
-                            Console.WriteLine("Look only for lines started like \"Transaction is incorrect...\".");
-                            Console.WriteLine("Ignore all lines started like \"Block is incorrect...\".");
                             Console.WriteLine("Press any key to continue...");
                             Program.DebugLogging = Temp;
                             Console.ReadKey();

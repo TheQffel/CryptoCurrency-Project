@@ -28,8 +28,7 @@ namespace OneCoin
 
             try
             {
-                Bitmap LibraryTest = new Bitmap(256, 256);
-                LibraryTest.Dispose();
+                new Bitmap(256, 256).Dispose();
             }
             catch (Exception Ex)
             {
@@ -51,6 +50,27 @@ namespace OneCoin
                 }
             }
             
+            if(new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds() < 1647451000)
+            {
+                if(Args.Length > 0) { Console.WriteLine("Running with arguments will be possible some time after mainnet launch."); }
+                Console.WriteLine("\n  THIS IS A GENESIS RUN - SYNCHRONISATION MAY BE QUITE SLOWER DUE TO LOTS OF NODES SYNCHRONISING AT THE SAME TIME - PLEASE WAIT  \n");
+                File.WriteAllText(Settings.AppPath + "/version.txt", "1.1.0");
+                Blockchain.SyncSpeed = 1000;
+                Args = Array.Empty<string>();
+                CheckUpdates = false;
+                long ToStart = 0;
+                while(!(ToStart > 1647450000))
+                {
+                    Thread.Sleep(11111);
+                    ToStart = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
+                    Console.WriteLine("To Start: " + (1647450001 - ToStart) + " Seconds.");
+                }
+                // Little delay to make sure genesis block is already on blockchain.
+                Thread.Sleep(9999);
+                Console.WriteLine("Starting mainnet node...");
+                Thread.Sleep(9999);
+            }
+
             for (int i = 0; i < Args.Length; i++)
             {
                 string[] Arguments = Args[i].Split(":");
@@ -67,7 +87,8 @@ namespace OneCoin
                             Console.WriteLine("-debug");
                             Console.WriteLine("-skipupdate");
                             Console.WriteLine("-forceupdate");
-                            Console.WriteLine("-mining:[address]:(pool)");
+                            Console.WriteLine("-mining:[address]:(threads):(pool)");
+                            Console.WriteLine("-syncspeed:[speed]");
                             Console.WriteLine("-database:[host]:[user]:[pass]:[db]:(avatarsdir):(qrcodesdir):(blocksdir)");
                             Console.WriteLine("-generatesignature:[key]:[message]");
                             Console.WriteLine("-verifysignature:[address]:[signature]:[message]");
@@ -102,6 +123,41 @@ namespace OneCoin
                             CheckUpdates = true;
                             break;
                         }
+                        case "syncspeed":
+                        {
+                            if (Arguments.Length > 1)
+                            {
+                                string Speed = Arguments[1].ToLower();
+                                if(Speed is "veryslow" or "slow" or "fast" or "veryfast" or "medium" or "normal" or "default")
+                                {
+                                    if(Speed == "veryslow")
+                                    {
+                                        Blockchain.SyncSpeed = 500;
+                                    }
+                                    if(Speed == "slow")
+                                    {
+                                        Blockchain.SyncSpeed = 250;
+                                    }
+                                    if(Speed == "fast")
+                                    {
+                                        Blockchain.SyncSpeed = 50;
+                                    }
+                                    if(Speed == "veryfast")
+                                    {
+                                        Blockchain.SyncSpeed = 25;
+                                    }
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Unknown speed, using \"normal\". Other values are: \"veryslow\", \"slow\", \"fast\", \"veryfast\".");
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine("To few arguments, use \"OneCoin -help\", to get all possible commands with arguments...");
+                            }
+                            break;
+                        }
                         case "mining":
                         {
                             MainMenuLoop = false;
@@ -115,14 +171,27 @@ namespace OneCoin
                                 {
                                     Task.Run(() => Network.ListenForConnections());
                                     Task.Run(() => Network.ListenForPackets());
-                                    Task.Run(() => Network.SearchVerifiedNodes());
+                                    Network.SearchVerifiedNodes();
+                                    
+                                    Task.Run(() => Mining.MiningWatchdog());
 
                                     Mining.MiningAddress = Arguments[1];
                                     if (Arguments.Length > 2)
-                                    { Mining.PoolAddress = Arguments[2]; }
+                                    {
+                                        int TempCount = int.Parse(Arguments[2]);
+                                        if(TempCount > 255) { TempCount = 255; }
+                                        if(TempCount > 0)
+                                        {
+                                            Mining.ThreadsCount = (byte)TempCount;
+                                        }
+                                    }
+                                    if (Arguments.Length > 3)
+                                    {
+                                        Mining.PoolAddress = Arguments[3];
+                                    }
                                     
                                     WelcomeScreen();
-                                    Mining.StartOrStop((byte)Environment.ProcessorCount);
+                                    Mining.StartOrStop(Mining.ThreadsCount);
                                     Mining.Menu();
                                     Console.WriteLine("Thank you for using One Coin! Hope to see you soon :)");
                                     
@@ -294,29 +363,28 @@ namespace OneCoin
                     }
                     
                     Console.WriteLine("Starting node, please wait...");
-                    
                     Task.Run(() => Network.ListenForConnections());
                     Task.Run(() => Network.ListenForPackets());
+                    
+                    Console.WriteLine("Searching for verified nodes...");
                     Network.SearchVerifiedNodes();
                     
-                    Thread.Sleep(1000);
-                    
-                    while(Network.ConnectedNodes() == 0)
+                    while(Network.ConnectedNodes(true) == 0)
                     {
                         Console.WriteLine("You are not connected to any nodes!");
                         Console.WriteLine("Make sure you have internet connection!");
                         Console.WriteLine("Then press any key to try again...");
                         Console.ReadKey();
+                        Console.WriteLine("Searching for verified nodes...");
                         Network.SearchVerifiedNodes();
-                        Console.WriteLine("Trying again... \n");
-                        Thread.Sleep(1000);
                     }
                     
                     Console.WriteLine("Synchronising blocks...");
                     Blockchain.CurrentHeight = Blockchain.LastBlockExists();
+                    Task.Run(() => Mining.MiningWatchdog());
                     Blockchain.FixCorruptedBlocks();
                     Blockchain.SyncBlocks();
-                    
+
                     Settings.Load();
                     Discord.StartService();
                     MainMenu();
@@ -513,7 +581,7 @@ namespace OneCoin
                             break;
                         }
                     }
-                    if (Wallets.CheckAddressCorrect(Wallets.AddressToShort(Account.PublicKey)))
+                    if (!Wallets.CheckAddressCorrect(Wallets.AddressToShort(Account.PublicKey)))
                     {
                         Console.ForegroundColor = ConsoleColor.DarkRed;
                         Console.WriteLine("Your address is not valid - it contains illegal characters (space or separator).");
@@ -624,20 +692,20 @@ namespace OneCoin
                 else if (UserChoice == 5)
                 {
                     Console.Write("Mining address or nickname: (type 0 to exit): ");
-                    string Address = Console.ReadLine();
-                    if(Address.Length != 88)
+                    string[] Address = (Console.ReadLine().Replace("#", "|") + "|1").Split('|');
+                    if(Address[0].Length != 88)
                     {
-                        Address = Wallets.GetAddress(Address);
+                        Address[0] = Wallets.GetAddress(Address[0], byte.Parse(Address[1]));
                     }
-                    if(Hashing.CheckStringFormat(Address, 4, 88, 88))
+                    if(Hashing.CheckStringFormat(Address[0], 4, 88, 88))
                     {
-                        Mining.MiningAddress = Address;
+                        Mining.MiningAddress = Address[0];
                         Mining.Menu();
                     }
                     else
                     {
                         Console.ForegroundColor = ConsoleColor.DarkRed;
-                        Console.Write("You entered wrong nickname or address!");
+                        Console.WriteLine("You entered wrong nickname or address!");
                         Console.ForegroundColor = ConsoleColor.White;
                         Console.Write("Press any key to continue...");
                         Console.ReadKey();

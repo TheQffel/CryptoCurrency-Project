@@ -16,7 +16,6 @@ namespace OneCoin
         public static TcpClient[] Peers = new TcpClient[256];
         public static bool[] IsListening = new bool[256];
 
-        public static string[] VerifiedNodes = Array.Empty<string>();
         public static Dictionary<long, bool> NodesTransmission = new();
 
         public static void ListenForPackets()
@@ -219,32 +218,36 @@ namespace OneCoin
         {
             try
             {
-                List<string> NodeIps = new List<string>();
-                foreach (var Address in Dns.GetHostEntry(Dns.GetHostName()).AddressList)
+                if(ConnectedNodes(true) < 16)
                 {
-                    NodeIps.Add(Address.MapToIPv4() + ":10101");
-                }
-                
-                string[] Nodes = NodeIps.Concat(ConnectedNodesAddresses()).ToArray();
-                for (int i = 0; i < Nodes.Length; i++)
-                {
-                    if(Nodes[i].Split(':')[0] == Ip)
+                    List<string> NodeIps = new List<string>();
+                    foreach (var Address in Dns.GetHostEntry(Dns.GetHostName()).AddressList)
                     {
-                        Ip = "0";
-                        break;
+                        NodeIps.Add(Address.MapToIPv4() + ":0");
                     }
-                }
-                
-                if (Ip.Length > 5)
-                {
-                    IPAddress Address = IPAddress.Parse(Ip);
                     
-                    if(!IPAddress.IsLoopback(Address))
+                    byte FullNodesCount = 0;
+                    string[] Nodes = NodeIps.Concat(ConnectedNodesAddresses()).ToArray();
+                    for (int i = 0; i < Nodes.Length; i++)
                     {
-                        TcpClient New = new();
-                        New.Connect(Address, Port);
+                        if(Nodes[i].Split(':')[0] == Ip)
+                        {
+                            Ip = "0";
+                            break;
+                        }
+                    }
+                    
+                    if (Ip.Length > 5)
+                    {
+                        IPAddress Address = IPAddress.Parse(Ip);
+                    
+                        if(!IPAddress.IsLoopback(Address))
+                        {
+                            TcpClient New = new();
+                            New.Connect(Address, Port);
                             
-                        Recieve(New, true);
+                            Recieve(New, true);
+                        }
                     }
                 }
             }
@@ -261,18 +264,21 @@ namespace OneCoin
         {
             try
             { 
-                new WebClient().DownloadFile("http://one-coin.org/verifiednodes.txt", Settings.AppPath + "/nodes.txt");
+                string LatestNodes = new WebClient().DownloadString("http://one-coin.org/verifiednodes.txt");
+                File.WriteAllText(Settings.AppPath + "/nodes.txt", LatestNodes);
             }
             catch (Exception Ex)
             {
                 if(Program.DebugLogging) { Console.WriteLine("Cannot refresh nodes list, using local file."); }
             }
             
-            VerifiedNodes = File.ReadAllLines(Settings.AppPath + "/nodes.txt");
-
-            for (int i = 0; i < VerifiedNodes.Length; i++)
+            string[] Nodes = File.ReadAllLines(Settings.AppPath + "/nodes.txt");
+            Random Random = new Random();
+            Nodes = Nodes.OrderBy(x => Random.Next()).ToArray();
+            
+            for (int i = 0; i < Nodes.Length; i++)
             {
-                string[] FullNode = VerifiedNodes[i].Split(":");
+                string[] FullNode = Nodes[i].Split(":");
                 if(FullNode.Length > 1)
                 {
                     Task.Run(() => Discover(FullNode[0], int.Parse(FullNode[1])));
@@ -307,30 +313,31 @@ namespace OneCoin
             }
         }
 
-        public static TcpClient RandomClient()
+        public static TcpClient RandomClient(out byte NodeIndex)
         {
             Random Random = new();
             
             if(ConnectedNodes() == 0)
             {
+                NodeIndex = 255;
                 return null;
             }
 
             while(true)
             {
-                int RandomPeer = Random.Next(0, 256);
+                NodeIndex = (byte)Random.Next(0, 256);
 
-                if (Peers[RandomPeer] != null)
+                if (Peers[NodeIndex] != null)
                 {
-                    if (Peers[RandomPeer].Connected)
+                    if (Peers[NodeIndex].Connected)
                     {
-                        return Peers[RandomPeer];
+                        return Peers[NodeIndex];
                     }
                 }
             }
         }
 
-        public static byte ConnectedNodes()
+        public static byte ConnectedNodes(bool OnlyPublic = false)
         {
             byte Nodes = 0;
 
@@ -340,7 +347,10 @@ namespace OneCoin
                 {
                     if (Peers[i].Connected)
                     {
-                        Nodes++;
+                        if(!OnlyPublic || ((IPEndPoint)Peers[i].Client.RemoteEndPoint).Port == 10101)
+                        {
+                            Nodes++;
+                        }
                     }
                 }
             }
@@ -403,9 +413,12 @@ namespace OneCoin
                         }
                         if (Messages[1].ToLower() == "response")
                         {
-                            for (int i = 2; i < Messages.Length; i++)
+                            Random Random = new Random();
+                            string[] Nodes = Messages.Skip(2).OrderBy(x => Random.Next()).ToArray();
+                            
+                            for (int i = 0; i < Nodes.Length; i++)
                             {
-                                Task.Run(() => Discover(Messages[i].Split(":")[0], int.Parse(Messages[i].Split(":")[1])));
+                                Task.Run(() => Discover(Nodes[i].Split(":")[0]));
                                 Thread.Sleep(100);
                             }
                         }
@@ -455,110 +468,111 @@ namespace OneCoin
                         {
                             if (Messages.Length > 15)
                             {
-                                lock (Mining.PendingTransactions)
+                                Block NewBlock = new();
+
+                                NewBlock.BlockHeight = uint.Parse(Messages[2]);
+                                NewBlock.PreviousHash = Messages[3];
+                                NewBlock.CurrentHash = Messages[4];
+                                NewBlock.Timestamp = ulong.Parse(Messages[5]);
+                                NewBlock.Difficulty = byte.Parse(Messages[6]);
+                                NewBlock.ExtraData = Messages[7];
+                                NewBlock.Transactions = new Transaction[ushort.Parse(Messages[8])];
+
+                                for (int i = 0; i < NewBlock.Transactions.Length; i++)
                                 {
-                                    Block NewBlock = new();
-
-                                    NewBlock.BlockHeight = uint.Parse(Messages[2]);
-                                    NewBlock.PreviousHash = Messages[3];
-                                    NewBlock.CurrentHash = Messages[4];
-                                    NewBlock.Timestamp = ulong.Parse(Messages[5]);
-                                    NewBlock.Difficulty = byte.Parse(Messages[6]);
-                                    NewBlock.ExtraData = Messages[7];
-                                    NewBlock.Transactions = new Transaction[ushort.Parse(Messages[8])];
-
-                                    for (int i = 0; i < NewBlock.Transactions.Length; i++)
+                                    NewBlock.Transactions[i] = new();
+                                    NewBlock.Transactions[i].From = Messages[9 + i * 7];
+                                    NewBlock.Transactions[i].To = Messages[10 + i * 7];
+                                    NewBlock.Transactions[i].Amount = BigInteger.Parse(Messages[11 + i * 7]);
+                                    NewBlock.Transactions[i].Fee = ulong.Parse(Messages[12 + i * 7]);
+                                    NewBlock.Transactions[i].Timestamp = ulong.Parse(Messages[13 + i * 7]);
+                                    NewBlock.Transactions[i].Message = Messages[14 + i * 7];
+                                    NewBlock.Transactions[i].Signature = Messages[15 + i * 7];
+                                }
+                                
+                                while(NewBlock.Timestamp > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
+                                {
+                                    Thread.Sleep(100);
+                                }
+                                
+                                if(Blockchain.SyncMode)
+                                {
+                                    if(!Blockchain.BlockExists(NewBlock.BlockHeight))
                                     {
-                                        NewBlock.Transactions[i] = new();
-                                        NewBlock.Transactions[i].From = Messages[9 + i * 7];
-                                        NewBlock.Transactions[i].To = Messages[10 + i * 7];
-                                        NewBlock.Transactions[i].Amount = BigInteger.Parse(Messages[11 + i * 7]);
-                                        NewBlock.Transactions[i].Fee = ulong.Parse(Messages[12 + i * 7]);
-                                        NewBlock.Transactions[i].Timestamp = ulong.Parse(Messages[13 + i * 7]);
-                                        NewBlock.Transactions[i].Message = Messages[14 + i * 7];
-                                        NewBlock.Transactions[i].Signature = Messages[15 + i * 7];
-                                    }
-                                    
-                                    while(NewBlock.Timestamp > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
-                                    {
-                                        Thread.Sleep(100);
-                                    }
-                                    
-                                    if(Blockchain.SyncMode)
-                                    {
-                                        if(!Blockchain.BlockExists(NewBlock.BlockHeight))
+                                        if(NewBlock.CheckBlockCorrect())
                                         {
-                                            if(NewBlock.CheckBlockCorrect())
-                                            {
-                                                Blockchain.SetBlock(NewBlock);
-                                            }
+                                            Blockchain.SetBlock(NewBlock);
+                                        }
+                                        else
+                                        {
+                                            Blockchain.TryAgain = true;
                                         }
                                     }
-                                    else
+                                }
+                                else
+                                {
+                                    if(!Blockchain.NodesChain.ContainsKey(NodeId))
                                     {
-                                        if(!Blockchain.NodesChain.ContainsKey(NodeId))
+                                        Blockchain.NodesChain[NodeId] = new Dictionary<uint, Block>();
+                                        Blockchain.NodesLock[NodeId] = false;
+                                        Blockchain.NodesMin[NodeId] = uint.MaxValue;
+                                        Blockchain.NodesMax[NodeId] = uint.MinValue;
+                                    }
+                                    
+                                    if(!Blockchain.NodesLock[NodeId])
+                                    {
+                                        Blockchain.NodesLock[NodeId] = true;
+                                        Blockchain.NodesChain[NodeId][NewBlock.BlockHeight] = NewBlock;
+                                        
+                                        if(Blockchain.NodesMin[NodeId] > NewBlock.BlockHeight)
                                         {
-                                            Blockchain.NodesChain[NodeId] = new Dictionary<uint, Block>();
-                                            Blockchain.NodesLock[NodeId] = false;
-                                            Blockchain.NodesMin[NodeId] = uint.MaxValue;
-                                            Blockchain.NodesMax[NodeId] = uint.MinValue;
+                                            Blockchain.NodesMin[NodeId] = NewBlock.BlockHeight;
+                                        }
+                                        if(Blockchain.NodesMax[NodeId] < NewBlock.BlockHeight)
+                                        {
+                                            Blockchain.NodesMax[NodeId] = NewBlock.BlockHeight;
                                         }
                                         
-                                        if(!Blockchain.NodesLock[NodeId])
+                                        uint Height = Blockchain.CurrentHeight;
+                                        uint Missing = Blockchain.CheckOtherNodes(NodeId);
+                                        Blockchain.NodesLock[NodeId] = false;
+                                        
+                                        if(Missing > 0)
                                         {
-                                            Blockchain.NodesLock[NodeId] = true;
-                                            Blockchain.NodesChain[NodeId][NewBlock.BlockHeight] = NewBlock;
-                                            
-                                            if(Blockchain.NodesMin[NodeId] > NewBlock.BlockHeight)
+                                            Task.Run(() => Send(TcpClient,  UdpClient, new[] { "Block", "Get", Missing.ToString() }));
+                                        }
+                                        else
+                                        {
+                                            if(Height != Blockchain.CurrentHeight)
                                             {
-                                                Blockchain.NodesMin[NodeId] = NewBlock.BlockHeight;
-                                            }
-                                            if(Blockchain.NodesMax[NodeId] < NewBlock.BlockHeight)
-                                            {
-                                                Blockchain.NodesMax[NodeId] = NewBlock.BlockHeight;
-                                            }
-                                            
-                                            uint Height = Blockchain.CurrentHeight;
-                                            uint Missing = Blockchain.CheckOtherNodes(NodeId);
-                                            Blockchain.NodesLock[NodeId] = false;
-                                            
-                                            if(Missing > 0)
-                                            {
-                                                Task.Run(() => Send(TcpClient,  UdpClient, new[] { "Block", "Get", Missing.ToString() }));
-                                            }
-                                            else
-                                            {
-                                                if(Height != Blockchain.CurrentHeight)
+                                                if (Blockchain.BlockExists(Blockchain.CurrentHeight))
                                                 {
-                                                    if (Blockchain.BlockExists(Blockchain.CurrentHeight))
+                                                    Block OldBlock = Blockchain.GetBlock(Blockchain.CurrentHeight);
+                                                    string[] BlockData = new string[OldBlock.Transactions.Length * 7 + 9];
+                                                    
+                                                    if(OldBlock.CheckBlockCorrect())
                                                     {
-                                                        Block OldBlock = Blockchain.GetBlock(Blockchain.CurrentHeight);
-                                                        string[] BlockData = new string[OldBlock.Transactions.Length * 7 + 9];
-                                                        
-                                                        if(OldBlock.CheckBlockCorrect())
-                                                        {
-                                                            BlockData[0] = "Block";
-                                                            BlockData[1] = "Set";
-                                                            BlockData[2] = OldBlock.BlockHeight.ToString();
-                                                            BlockData[3] = OldBlock.PreviousHash;
-                                                            BlockData[4] = OldBlock.CurrentHash;
-                                                            BlockData[5] = OldBlock.Timestamp.ToString();
-                                                            BlockData[6] = OldBlock.Difficulty.ToString();
-                                                            BlockData[7] = OldBlock.ExtraData;
-                                                            BlockData[8] = OldBlock.Transactions.Length.ToString();
+                                                        BlockData[0] = "Block";
+                                                        BlockData[1] = "Set";
+                                                        BlockData[2] = OldBlock.BlockHeight.ToString();
+                                                        BlockData[3] = OldBlock.PreviousHash;
+                                                        BlockData[4] = OldBlock.CurrentHash;
+                                                        BlockData[5] = OldBlock.Timestamp.ToString();
+                                                        BlockData[6] = OldBlock.Difficulty.ToString();
+                                                        BlockData[7] = OldBlock.ExtraData;
+                                                        BlockData[8] = OldBlock.Transactions.Length.ToString();
 
-                                                            for (int i = 0; i < OldBlock.Transactions.Length; i++)
-                                                            {
-                                                                BlockData[9 + i * 7] = OldBlock.Transactions[i].From;
-                                                                BlockData[10 + i * 7] = OldBlock.Transactions[i].To;
-                                                                BlockData[11 + i * 7] = OldBlock.Transactions[i].Amount.ToString();
-                                                                BlockData[12 + i * 7] = OldBlock.Transactions[i].Fee.ToString();
-                                                                BlockData[13 + i * 7] = OldBlock.Transactions[i].Timestamp.ToString();
-                                                                BlockData[14 + i * 7] = OldBlock.Transactions[i].Message;
-                                                                BlockData[15 + i * 7] = OldBlock.Transactions[i].Signature;
-                                                            }
-                                                            Broadcast(BlockData);
+                                                        for (int i = 0; i < OldBlock.Transactions.Length; i++)
+                                                        {
+                                                            BlockData[9 + i * 7] = OldBlock.Transactions[i].From;
+                                                            BlockData[10 + i * 7] = OldBlock.Transactions[i].To;
+                                                            BlockData[11 + i * 7] = OldBlock.Transactions[i].Amount.ToString();
+                                                            BlockData[12 + i * 7] = OldBlock.Transactions[i].Fee.ToString();
+                                                            BlockData[13 + i * 7] = OldBlock.Transactions[i].Timestamp.ToString();
+                                                            BlockData[14 + i * 7] = OldBlock.Transactions[i].Message;
+                                                            BlockData[15 + i * 7] = OldBlock.Transactions[i].Signature;
                                                         }
+                                                        Broadcast(BlockData);
                                                     }
                                                 }
                                             }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Net.Sockets;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,6 +14,8 @@ namespace OneCoin
     {
         public static uint CurrentHeight = 1;
         public static bool SyncMode = true;
+        public static bool TryAgain = false;
+        public static short SyncSpeed = 100;
         
         static Dictionary<uint, Block> BlocksInMemory = new();
         static readonly object FileSystemRead = new();
@@ -134,12 +137,20 @@ namespace OneCoin
                         {
                             TempHeight = i - 1;
                             DeleteNow = true;
+                            
+                            Console.ForegroundColor = ConsoleColor.DarkRed;
+                            Console.WriteLine("Incorrect block was found, fixing now...");
+                            Console.ForegroundColor = ConsoleColor.White;
                         }
                     }
                     else
                     {
                         TempHeight = i - 1;
                         DeleteNow = true;
+                        
+                        Console.ForegroundColor = ConsoleColor.DarkYellow;
+                        Console.WriteLine("Missing block was found, fixing now...");
+                        Console.ForegroundColor = ConsoleColor.White;
                     }
                     
                 }
@@ -160,18 +171,32 @@ namespace OneCoin
             SyncMode = true;
             byte Timeout = 0;
             
-            Console.WriteLine("You are not synced at height: " + CurrentHeight);
+            bool[] Nodes = new bool[256];
+            bool FirstRun = CurrentHeight < 10;
+            
+            Console.ForegroundColor = ConsoleColor.DarkRed;
+            //Console.WriteLine("You are not synced at height: " + CurrentHeight);
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
             
             for (uint i = CurrentHeight + 1; i < uint.MaxValue; i++)
             {
+                for (int j = 0; j < Nodes.Length; j++)
+                {
+                    Nodes[j] = false;
+                }
+                
                 while(!BlockExists(i) && Timeout <= 100)
                 {
-                    if(Timeout % 10 == 0)
-                    {
-                        Task.Run(() => Network.Send(Network.RandomClient(), null, new [] { "Block", "Get", i.ToString() } ));
-                    }
+                    TcpClient RandomNode = Network.RandomClient(out byte NodeIndex);
                     
-                    Thread.Sleep(10);
+                    if(!Nodes[NodeIndex])
+                    {
+                        Nodes[NodeIndex] = !Nodes[NodeIndex];
+                        Task.Run(() => Network.Send(RandomNode, null, new [] { "Block", "Get", i.ToString() } ));
+                    }
+
+                    Thread.Sleep(SyncSpeed);
+                    
                     Timeout++;
                 }
                 if(Timeout > 100)
@@ -180,16 +205,51 @@ namespace OneCoin
                 }
                 Timeout = 0;
                 
-                if(i % 1000 == 0)
+                if(i%10 == 1 || Timeout == 40 || Timeout == 80)
                 {
-                    Console.WriteLine("Current synchronisation height: " + i);
+                    Console.WriteLine("Synchronising, please wait...");
+                }
+                
+                if(i % 50 == 0)
+                {
+                    Console.WriteLine("Average speed: " + (1000.0/SyncSpeed + ".00").Substring(0, 4) + " block(s) per second.");
+                    // Slow down sync at mainnet launch.
+                    if(SyncSpeed == 200) { SyncSpeed = 100; }
+                    if(SyncSpeed == 450) { SyncSpeed = 200; }
+                    if(SyncSpeed == 700) { SyncSpeed = 450; }
+                    if(SyncSpeed == 1000) { SyncSpeed = 700; }
+                    //Console.WriteLine("Current synchronisation height: " + i);
                 }
             }
             
-            Console.WriteLine("You are now synced to height: " + CurrentHeight);
+            Console.ForegroundColor = ConsoleColor.DarkGreen;
+            //Console.WriteLine("You are now synced to height: " + CurrentHeight);
             
             SyncMode = false;
             FixCorruptedBlocks();
+            
+            if(TryAgain)
+            {
+                /*Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.WriteLine("At least one block was incorrect.");
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                Console.WriteLine("Trying again, please wait...");
+                Thread.Sleep(10000);*/
+                DelBlock(CurrentHeight);
+                TryAgain = false;
+                SyncBlocks();
+            }
+            
+            if(FirstRun)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine("It looks like you are using this app first time.");
+                Console.WriteLine("Check if you are synchronised to right height.");
+                Console.WriteLine("Press any key to continue...");
+                //Console.ReadKey();
+            }
+            
+            Console.ForegroundColor = ConsoleColor.White;
         }
         
         public static uint CheckOtherNodes(long NodeId)
@@ -274,7 +334,7 @@ namespace OneCoin
         {
             bool AvailableOnNodes = Height == 0;
             if(NodeId > -1) { AvailableOnNodes = NodesChain[NodeId].ContainsKey(Height); }
-            return (BlocksInMemory.ContainsKey(Height) || File.Exists(Settings.BlockchainPath + Height + ".dat")) || AvailableOnNodes;
+            return BlocksInMemory.ContainsKey(Height) || File.Exists(Settings.BlockchainPath + Height + ".dat") || AvailableOnNodes;
         }
 
         public static uint LastBlockExists()
@@ -369,7 +429,7 @@ namespace OneCoin
             byte Timeout = 0;
             while ((!File.Exists(Settings.BlockchainPath + Height + ".dat") || !File.Exists(Settings.TransactionsPath + Height + ".dat")) && Timeout++ < 100)
             {
-                Task.Run(() => Network.Send(Network.RandomClient(), null, new [] { "Block", "Get", Height.ToString() } ));
+                Task.Run(() => Network.Send(Network.RandomClient(out _), null, new [] { "Block", "Get", Height.ToString() } ));
                 
                 Thread.Sleep(100);
             }
@@ -476,11 +536,20 @@ namespace OneCoin
         {
             while(true)
             {
+                uint NewHeight;
+                Console.WriteLine("Current blockchain height: " + CurrentHeight);
                 Console.Write("Enter block number (type 0 to exit): ");
-                uint NewHeight = uint.Parse(Console.ReadLine());
+                while(!uint.TryParse(Console.ReadLine(), out NewHeight))
+                {
+                    Console.Write("Incorrect block number, please try again: ");
+                }
                 if(NewHeight == 0)
                 {
                     break;
+                }
+                if(NewHeight > CurrentHeight)
+                {
+                    NewHeight = CurrentHeight;
                 }
                 while (true)
                 {
@@ -510,12 +579,20 @@ namespace OneCoin
                         {
                             NewHeight -= 1000;
                         }
+                        else
+                        {
+                            NewHeight = 1;
+                        }
                     }
                     if(Key == ConsoleKey.PageUp)
                     {
                         if(NewHeight < CurrentHeight - 1000)
                         {
                             NewHeight += 1000;
+                        }
+                        else
+                        {
+                            NewHeight = CurrentHeight;
                         }
                     }
                     if(Key == ConsoleKey.Home)

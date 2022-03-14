@@ -15,7 +15,7 @@ namespace OneCoin
     {
         public static string[] AddressEncoding = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", " ", "|" };
         public static ulong[] MinerRewards = { 423539247696576513, 288230376151711744, 144115188075855872, 72057594037927936, 36028797018963968, 18014398509481984, 9007199254740992, 4503599627370496, 2251799813685248, 1125899906842624, 562949953421312, 281474976710656, 140737488355328, 70368744177664, 35184372088832, 17592186044416, 8796093022208, 4398046511104, 2199023255552, 1099511627776, 549755813888, 274877906944, 137438953472, 68719476736, 34359738368, 17179869184, 8589934592, 4294967296, 2147483648, 1073741824, 536870912, 268435456, 134217728, 67108864, 33554432, 16777216, 8388608, 4194304, 2097152, 1048576, 524288, 262144, 131072, 65536, 32768, 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0, 0, 0, 0 };
-
+        
         public static uint LastCacheHeight = 0;
         public static bool CacheUpdateInProgress = false;
         
@@ -97,16 +97,19 @@ namespace OneCoin
         {
             string Address = "";
             UpdateNicknamesAvatarsCache();
-            
+            List<KeyValuePair<string, uint>> Addresses = new();
+
             foreach(KeyValuePair<string, KeyValuePair<string, uint>> Entry in NicknameCache)
             {
                 if(Entry.Value.Key.Replace(" ", "").ToLower() == Name.Replace(" ", "").ToLower())
                 {
-                    if(GetName(Entry.Value.Key).Split('|')[1] == Tag.ToString())
-                    {
-                        Address = Entry.Key;
-                    }
+                    Addresses.Add(new KeyValuePair<string, uint>(Entry.Key, Entry.Value.Value));
                 }
+            }
+            if(Addresses.Count >= Tag)
+            {
+                Addresses.Sort((x, y) => x.Value.CompareTo(y.Value));
+                Address = Addresses[Tag-1].Key;
             }
             return Address;
         }
@@ -208,7 +211,8 @@ namespace OneCoin
 
         public static string AddressToShort(string Address)
         {
-            if(Address != null)
+            if(Address == null) { Address = " "; }
+            if(Address.Length > 9)
             {
                 int Total = 0;
                 String Binary = "";
@@ -247,35 +251,37 @@ namespace OneCoin
 
         public static string AddressToLong(string Address)
         {
-            int Total = 0;
-            String Binary = "";
-            for(int i = 0; i < Address.Length; i++)
+            if(Hashing.CheckStringFormat(Address, 4, 88, 88))
             {
-                char Letter = Address[i];
-                for (short j = 0; j < AddressEncoding.Length; j++)
+                int Total = 0;
+                String Binary = "";
+                for(int i = 0; i < Address.Length; i++)
                 {
-                    if(Letter == AddressEncoding[j][0]) { Binary += Convert.ToString(j, 2).PadLeft(6, '0'); }
+                    char Letter = Address[i];
+                    for (short j = 0; j < AddressEncoding.Length; j++)
+                    {
+                        if(Letter == AddressEncoding[j][0]) { Binary += Convert.ToString(j, 2).PadLeft(6, '0'); }
+                    }
                 }
-            }
-            String Result = "04";
-            for(int i = 0; i < 128; i++)
-            {
-                String Letters = "0000" + Binary.Substring(i*4, 4);
-                short Value = Convert.ToInt16(Letters, 2);
-                Result += AddressEncoding[Value];
-                Total += Value * i;
-            }
-            if(Convert.ToString(Total % 65536, 2).PadLeft(16, '0') == Binary[512..])
-            {
-                return Result.ToLower();
+                String Result = "04";
+                for(int i = 0; i < 128; i++)
+                {
+                    String Letters = "0000" + Binary.Substring(i*4, 4);
+                    short Value = Convert.ToInt16(Letters, 2);
+                    Result += AddressEncoding[Value];
+                    Total += Value * i;
+                }
+                if(Convert.ToString(Total % 65536, 2).PadLeft(16, '0') == Binary[512..])
+                {
+                    return Result.ToLower();
+                }
             }
             return " ";
         }
         
         public static bool CheckAddressCorrect(string Address)
         {
-            if(Address.Length != 88) { return false; }
-            return AddressToLong(Address).Length > 9 && Hashing.CheckStringFormat(Address, 4, 88, 88);
+            return AddressToLong(Address).Length > 9;
         }
 
         public static void PrintQrCode(string Address)
@@ -316,6 +322,7 @@ namespace OneCoin
 
         public static bool VerifySignature(string Message, string PublicKey, string Signature)
         {
+            if(!CheckAddressCorrect(AddressToShort(PublicKey))) { return false; }
             var Curve = SecNamedCurves.GetByName("secp256k1");
             var Domain = new ECDomainParameters(Curve.Curve, Curve.G, Curve.N, Curve.H);
             var PublicKeyBytes = Hashing.HexToBytes(PublicKey);
@@ -325,6 +332,7 @@ namespace OneCoin
             Signer.Init(false, KeyParameters);
             Signer.BlockUpdate(Encoding.ASCII.GetBytes(Message), 0, Message.Length);
             var SignatureBytes = Hashing.HexToBytes(Signature);
+            if(SignatureBytes == null) { return false; }
             return Signer.VerifySignature(SignatureBytes);
         }
 
