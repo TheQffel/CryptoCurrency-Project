@@ -381,7 +381,7 @@ namespace OneCoin
                         UdpClient Client = new UdpClient();
                         Client.Connect(PoolAddress, 10101);
                         Task.Run(() => Network.Send(null, Client, BlockData));
-                        Thread.Sleep(100);
+                        Thread.Sleep(1000);
                         Client.Close();
                         Client.Dispose();
                     }

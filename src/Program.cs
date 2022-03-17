@@ -146,37 +146,58 @@ namespace OneCoin
                                 {
                                     CheckForUpdates();
                                 }
-                                else
+                                
+                                Console.WriteLine("Starting node, please wait...");
+                                Task.Run(() => Network.ListenForConnections());
+                                Task.Run(() => Network.ListenForPackets());
+                    
+                                Console.WriteLine("Searching for verified nodes...");
+                                Network.SearchVerifiedNodes();
+                    
+                                while(Network.ConnectedNodes(true) == 0)
                                 {
-                                    Task.Run(() => Network.ListenForConnections());
-                                    Task.Run(() => Network.ListenForPackets());
+                                    Console.WriteLine("You are not connected to any nodes!");
+                                    Console.WriteLine("Make sure you have internet connection!");
+                                    Console.WriteLine("Trying again in 10 seconds...");
+                                    Thread.Sleep(10000);
+                                    Console.WriteLine("Searching for verified nodes...");
                                     Network.SearchVerifiedNodes();
-                                    
-                                    Task.Run(() => Mining.MiningWatchdog());
-
-                                    Mining.MiningAddress = Arguments[1];
-                                    if (Arguments.Length > 2)
-                                    {
-                                        int TempCount = int.Parse(Arguments[2]);
-                                        if(TempCount > 255) { TempCount = 255; }
-                                        if(TempCount > 0)
-                                        {
-                                            Mining.ThreadsCount = (byte)TempCount;
-                                        }
-                                    }
-                                    if (Arguments.Length > 3)
-                                    {
-                                        Mining.PoolAddress = Arguments[3];
-                                    }
-                                    
-                                    WelcomeScreen();
-                                    Mining.StartOrStop(Mining.ThreadsCount);
-                                    Mining.Menu();
-                                    Console.WriteLine("Thank you for using One Coin! Hope to see you soon :)");
-                                    
-                                    Task.Run(() => Network.FlushConnections());
-                                    Thread.Sleep(5000);
                                 }
+                    
+                                Console.WriteLine("Synchronising blocks...");
+                                Blockchain.CurrentHeight = Blockchain.LastBlockExists();
+                                Task.Run(() => Mining.MiningWatchdog());
+                                Blockchain.FixCorruptedBlocks();
+                                Blockchain.SyncBlocks();
+
+                                Settings.Load();
+                                Discord.StartService();
+                                
+                                Mining.MiningAddress = Arguments[1];
+                                if (Arguments.Length > 2)
+                                {
+                                    int TempCount = int.Parse(Arguments[2]);
+                                    if(TempCount > 255) { TempCount = 255; }
+                                    if(TempCount > 0)
+                                    {
+                                        Mining.ThreadsCount = (byte)TempCount;
+                                    }
+                                }
+                                if (Arguments.Length > 3)
+                                {
+                                    Mining.PoolAddress = Arguments[3];
+                                }
+                                
+                                WelcomeScreen();
+                                Mining.StartOrStop(Mining.ThreadsCount);
+                                Mining.Menu();
+                                Mining.KeepMining = false;
+                                Console.WriteLine("Thank you for using One Coin! Hope to see you soon :)");
+                                
+                                Discord.StopService();
+                                Settings.Save();
+                                Task.Run(() => Network.FlushConnections());
+                                Blockchain.DatabaseHost = "";
                             }
                             else
                             {
