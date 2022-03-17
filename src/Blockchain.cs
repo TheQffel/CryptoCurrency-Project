@@ -52,6 +52,22 @@ namespace OneCoin
                     Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash", "'0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0'");
                 }
                 uint LatestStoredBlock = uint.Parse(Tmp);
+
+                for (uint i = 0; i < LatestStoredBlock; i++)
+                {
+                    Block ToInsert = GetBlock(i);
+                    
+                    for (int j = 0; j < ToInsert.Transactions.Length; j++)
+                    {      
+                        if(ToInsert.Transactions[j].To.Length == 88)
+                        {
+                            if(!AllKnownAddresses.Contains(ToInsert.Transactions[j].To))
+                            {
+                                AllKnownAddresses.Add(ToInsert.Transactions[j].To);
+                            }
+                        }
+                    }
+                }
                 
                 Thread.Sleep(10000);
                 
@@ -100,6 +116,14 @@ namespace OneCoin
                                 Thread.Sleep(1000);
                             
                                 Database.Add("transactions", "BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature", "'" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Signature + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "'");
+                                
+                                if(ToInsert.Transactions[j].To.Length == 88)
+                                {
+                                    if(!AllKnownAddresses.Contains(ToInsert.Transactions[j].To))
+                                    {
+                                        AllKnownAddresses.Add(ToInsert.Transactions[j].To);
+                                    }
+                                }
                             }
                         }
                         else
@@ -175,7 +199,7 @@ namespace OneCoin
             bool FirstRun = CurrentHeight < 10;
             
             Console.ForegroundColor = ConsoleColor.DarkRed;
-            //Console.WriteLine("You are not synced at height: " + CurrentHeight);
+            Console.WriteLine("You are not synced at height: " + CurrentHeight);
             Console.ForegroundColor = ConsoleColor.DarkCyan;
             
             for (uint i = CurrentHeight + 1; i < uint.MaxValue; i++)
@@ -205,36 +229,25 @@ namespace OneCoin
                 }
                 Timeout = 0;
                 
-                if(i%10 == 1 || Timeout == 40 || Timeout == 80)
+                if(i % 1000 == 0)
                 {
-                    Console.WriteLine("Synchronising, please wait...");
-                }
-                
-                if(i % 50 == 0)
-                {
-                    Console.WriteLine("Average speed: " + (1000.0/SyncSpeed + ".00").Substring(0, 4) + " block(s) per second.");
-                    // Slow down sync at mainnet launch.
-                    if(SyncSpeed == 200) { SyncSpeed = 100; }
-                    if(SyncSpeed == 450) { SyncSpeed = 200; }
-                    if(SyncSpeed == 700) { SyncSpeed = 450; }
-                    if(SyncSpeed == 1000) { SyncSpeed = 700; }
-                    //Console.WriteLine("Current synchronisation height: " + i);
+                    Console.WriteLine("Current synchronisation height: " + i);
                 }
             }
             
             Console.ForegroundColor = ConsoleColor.DarkGreen;
-            //Console.WriteLine("You are now synced to height: " + CurrentHeight);
+            Console.WriteLine("You are now synced to height: " + CurrentHeight);
             
             SyncMode = false;
             FixCorruptedBlocks();
             
             if(TryAgain)
             {
-                /*Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.ForegroundColor = ConsoleColor.DarkRed;
                 Console.WriteLine("At least one block was incorrect.");
                 Console.ForegroundColor = ConsoleColor.DarkYellow;
                 Console.WriteLine("Trying again, please wait...");
-                Thread.Sleep(10000);*/
+                Thread.Sleep(10000);
                 DelBlock(CurrentHeight);
                 TryAgain = false;
                 SyncBlocks();
@@ -246,7 +259,7 @@ namespace OneCoin
                 Console.WriteLine("It looks like you are using this app first time.");
                 Console.WriteLine("Check if you are synchronised to right height.");
                 Console.WriteLine("Press any key to continue...");
-                //Console.ReadKey();
+                Console.ReadKey();
             }
             
             Console.ForegroundColor = ConsoleColor.White;

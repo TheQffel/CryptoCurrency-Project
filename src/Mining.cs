@@ -138,30 +138,23 @@ namespace OneCoin
             bool CanBeChanged = true;
 
             
-            if(CurrentBlock.BlockHeight >= 10)
+            for (uint i = 0; i < 10; i++)
             {
-                for (uint i = 0; i < 10; i++)
-                {
-                    if(!Blockchain.BlockExists(CurrentBlock.BlockHeight - (i + 1))) { if(Program.DebugLogging) { Console.WriteLine("Cannot prepare to mine: Missing blocks!"); } return; }
-                    
-                    if(Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Difficulty != Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Difficulty && i != 9)
-                    {
-                        CanBeChanged = false;
-                    }
-                    TimestampDifferences += (Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Timestamp - Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Timestamp);
-                }
+                if(!Blockchain.BlockExists(CurrentBlock.BlockHeight - (i + 1))) { if(Program.DebugLogging) { Console.WriteLine("Cannot prepare to mine: Missing blocks!"); } return; }
                 
-                if(CanBeChanged)
+                if(Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Difficulty != Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Difficulty && i != 9)
                 {
-                    TimestampDifferences /= 10;
-                    
-                    if (TimestampDifferences < CurrentBlock.Difficulty || CurrentBlock.BlockHeight == 0 || CurrentBlock.BlockHeight == 1) { NextDifficulty++; }
-                    if (TimestampDifferences > (ulong)CurrentBlock.Difficulty * (ulong)CurrentBlock.Difficulty) { NextDifficulty--; }
+                    CanBeChanged = false;
                 }
+                TimestampDifferences += (Blockchain.GetBlock(CurrentBlock.BlockHeight - i).Timestamp - Blockchain.GetBlock(CurrentBlock.BlockHeight - (i + 1)).Timestamp);
             }
-            else
+            
+            if(CanBeChanged)
             {
-                NextDifficulty = (byte)(CurrentBlock.BlockHeight+1);
+                TimestampDifferences /= 10;
+                
+                if (TimestampDifferences < CurrentBlock.Difficulty) { NextDifficulty++; }
+                if (TimestampDifferences > (ulong)CurrentBlock.Difficulty * (ulong)CurrentBlock.Difficulty) { NextDifficulty--; }
             }
 
             ToBeMined = new Block[256];

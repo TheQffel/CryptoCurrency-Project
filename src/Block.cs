@@ -127,7 +127,7 @@ namespace OneCoin
             }
             
             Block PreviousBlock = Blockchain.GetBlock(BlockHeight - 1, NodeId);
-            bool Correct = true;
+            bool Correct = Timestamp >= 1647450000;
 
             RecalculateHash(true, NodeId);
             

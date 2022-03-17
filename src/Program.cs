@@ -49,27 +49,6 @@ namespace OneCoin
                     Console.ReadKey();
                 }
             }
-            
-            if(new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds() < 1647451000)
-            {
-                if(Args.Length > 0) { Console.WriteLine("Running with arguments will be possible some time after mainnet launch."); }
-                Console.WriteLine("\n  THIS IS A GENESIS RUN - SYNCHRONISATION MAY BE QUITE SLOWER DUE TO LOTS OF NODES SYNCHRONISING AT THE SAME TIME - PLEASE WAIT  \n");
-                File.WriteAllText(Settings.AppPath + "/version.txt", "1.1.0");
-                Blockchain.SyncSpeed = 1000;
-                Args = Array.Empty<string>();
-                CheckUpdates = false;
-                long ToStart = 0;
-                while(!(ToStart > 1647450000))
-                {
-                    Thread.Sleep(11111);
-                    ToStart = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
-                    Console.WriteLine("To Start: " + (1647450001 - ToStart) + " Seconds.");
-                }
-                // Little delay to make sure genesis block is already on blockchain.
-                Thread.Sleep(9999);
-                Console.WriteLine("Starting mainnet node...");
-                Thread.Sleep(9999);
-            }
 
             for (int i = 0; i < Args.Length; i++)
             {
@@ -392,6 +371,11 @@ namespace OneCoin
                     Settings.Save();
                     Task.Run(() => Network.FlushConnections());
                     Blockchain.DatabaseHost = "";
+                    
+                    if (CheckUpdates)
+                    {
+                        CheckForUpdates();
+                    }
                     Thread.Sleep(5000);
                 }
                 else
