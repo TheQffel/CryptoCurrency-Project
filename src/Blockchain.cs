@@ -51,9 +51,14 @@ namespace OneCoin
                     Tmp = "0";
                     Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash", "'0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0'");
                 }
-                uint LatestStoredBlock = uint.Parse(Tmp);
+                uint DbHeight = uint.Parse(Tmp) + 1;
 
-                for (uint i = 0; i < LatestStoredBlock; i++)
+                while(SyncMode)
+                {
+                    Thread.Sleep(1000);
+                }
+                
+                for (uint i = 0; i < CurrentHeight; i++)
                 {
                     Block ToInsert = GetBlock(i);
                     
@@ -69,12 +74,15 @@ namespace OneCoin
                     }
                 }
                 
-                Thread.Sleep(10000);
-                
                 while(DatabaseHost.Length > 1)
                 {
                     for(int i = 0; i < AllKnownAddresses.Count; i++)
                     {
+                        if(Program.DebugLogging)
+                        {
+                            Console.WriteLine("Updating user: " + AllKnownAddresses[i]);
+                        }
+                        
                         string[] Temp = (Wallets.GetName(AllKnownAddresses[i]) + "|1").Split("|");
                         Temp = new [] { Wallets.GetBalance(AllKnownAddresses[i]).ToString(), Temp[0], Temp[1], Wallets.GetAvatar(AllKnownAddresses[i]) };
                         
@@ -93,17 +101,24 @@ namespace OneCoin
                             new Bitmap(QrCode, QrCode.Width*4, QrCode.Height*4).Save(TempQrCodesPath + "/" + AllKnownAddresses[i] + ".png", ImageFormat.Png);
                         }
                         
-                        Thread.Sleep(10000);
+                        Thread.Sleep(1000);
                     }
+                    
+                    AllKnownAddresses.Clear();
 
-                    for (uint i = LatestStoredBlock + 1; i < CurrentHeight; i++)
+                    for (; DbHeight < CurrentHeight; DbHeight++)
                     {
-                        Block ToInsert = GetBlock(i);
+                        Block ToInsert = GetBlock(DbHeight);
                         
-                        string Hash = Database.Get("blocks", "CurrentHash", "BlockHeight='" + (i-1) + "'")[0][0];
+                        string Hash = Database.Get("blocks", "CurrentHash", "BlockHeight='" + (DbHeight - 1) + "'")[0][0];
                         
-                        if(Hash == ToInsert.PreviousHash )
+                        if(Hash == ToInsert.PreviousHash)
                         {
+                            if(Program.DebugLogging)
+                            {
+                                Console.WriteLine("Adding block and transactions to database: " + DbHeight);
+                            }
+                            
                             Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash, Timestamp, Difficulty, Message, ExtraData", "'" + ToInsert.BlockHeight + "', '" + ToInsert.PreviousHash + "', '" + ToInsert.CurrentHash + "', '" + ToInsert.Timestamp + "', '" + ToInsert.Difficulty + "', '" + ToInsert.ExtraData.Split('|')[1] + "', '" + ToInsert.ExtraData.Split('|')[2] + "'");
                             
                             if(TempBlocksPath.Length > 1)
@@ -113,9 +128,17 @@ namespace OneCoin
 
                             for (int j = 0; j < ToInsert.Transactions.Length; j++)
                             {
-                                Thread.Sleep(1000);
+                                Thread.Sleep(100);
                             
                                 Database.Add("transactions", "BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature", "'" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Signature + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "'");
+                                
+                                if(ToInsert.Transactions[j].From.Length == 88)
+                                {
+                                    if(!AllKnownAddresses.Contains(ToInsert.Transactions[j].From))
+                                    {
+                                        AllKnownAddresses.Add(ToInsert.Transactions[j].From);
+                                    }
+                                }
                                 
                                 if(ToInsert.Transactions[j].To.Length == 88)
                                 {
@@ -128,20 +151,29 @@ namespace OneCoin
                         }
                         else
                         {
-                            Database.Del("blocks", "BlockHeight='" + (i-1) + "'");
-                            Database.Del("transactions", "BlockHeight='" + (i-1) + "'");
+                            DbHeight--;
                             
-                            i -= 2;
+                            if(Program.DebugLogging)
+                            {
+                                Console.WriteLine("Removing previous block with wrong hash: " + DbHeight);
+                            }
+                            
+                            Database.Del("blocks", "BlockHeight='" + DbHeight + "'");
+                            Database.Del("transactions", "BlockHeight='" + DbHeight + "'");
+                            
+                            DbHeight--;
                         }
                         
-                        Thread.Sleep(10000);
+                        Thread.Sleep(1000);
                     }
                 }
+                
                 Database.Disconnect();
+                
             }
-            catch (Exception e)
+            catch (Exception Ex)
             {
-                Console.WriteLine(e);
+                Console.WriteLine(Ex);
             }
         }
         

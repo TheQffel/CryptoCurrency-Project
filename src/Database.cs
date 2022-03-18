@@ -6,11 +6,12 @@ namespace OneCoin
 {
     class Database
     {
-        static MySqlConnection Connection = new();
+        static MySqlConnection Connection;
+        static object MySqlLock = new();
         
         public static void Connect(string Host, string User, string Pass, string Db)
         {
-            lock(Connection)
+            lock(MySqlLock)
             {
                 string ConnectionString = "Server=" + Host + ";" + "UserId=" + User + ";" + "Password=" + Pass + ";" + "Database=" + Db + ";" + "SslMode=None";
                 Connection = new MySqlConnection(ConnectionString);
@@ -20,15 +21,17 @@ namespace OneCoin
         
         public static void Disconnect()
         {
-            lock(Connection)
+            lock(MySqlLock)
             {
                 Connection.Close();
+                Connection.Dispose();
+                Connection = null;
             }
         }
         
         public static void SpecialCommand(string Command)
         {
-            lock(Connection)
+            lock(MySqlLock)
             {
                 MySqlCommand Cmd = Connection.CreateCommand();
                 Cmd.CommandText = Command;
@@ -40,7 +43,7 @@ namespace OneCoin
         {
             DataTable Result = new();
             
-            lock(Connection)
+            lock(MySqlLock)
             {
                 MySqlCommand Command = Connection.CreateCommand();
                 Command.CommandText = "SELECT " + Column + " FROM " + Table;
@@ -78,7 +81,7 @@ namespace OneCoin
         public static int Set(string Table, string ColumnValues, string When)
         {
             int Result;
-            lock(Connection)
+            lock(MySqlLock)
             {
                 MySqlCommand Command = Connection.CreateCommand();
                 Command.CommandText = "UPDATE " + Table + " SET " + ColumnValues + " WHERE " + When;
@@ -90,7 +93,7 @@ namespace OneCoin
         public static int Add(string Table, string Columns, string Values)
         {
             int Result;
-            lock(Connection)
+            lock(MySqlLock)
             {
                 MySqlCommand Command = Connection.CreateCommand();
                 Command.CommandText = "INSERT INTO " + Table + " (" + Columns + ") VALUES (" + Values + ")";
@@ -102,7 +105,7 @@ namespace OneCoin
         public static int Del(string Table, string Where)
         {
             int Result;
-            lock(Connection)
+            lock(MySqlLock)
             {
                 MySqlCommand Command = Connection.CreateCommand();
                 Command.CommandText = "DELETE FROM " + Table + " WHERE " + Where;

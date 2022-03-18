@@ -253,9 +253,12 @@ namespace OneCoin
             }
             catch (Exception Ex)
             {
-                if(Program.DebugLogging && !(Ex.GetType().IsAssignableFrom(typeof(SocketException))))
+                if(Program.DebugLogging)
                 {
-                    Console.WriteLine(Ex);
+                    if(((SocketException)Ex).ErrorCode is not 110 and not 111)
+                    {
+                        Console.WriteLine(Ex);
+                    }
                 }
             }
         }
@@ -588,12 +591,11 @@ namespace OneCoin
                 {
                     if (Messages.Length > 7)
                     {
-                        bool A = Messages[2].Length <= 25 && Blockchain.CurrentHeight >= 1000; // Unlock nicknames at 1k
-                        bool B = Messages[2].Length >= 99 && Blockchain.CurrentHeight >= 10000; // Unlock avatars at 10k
-                        bool C = Messages[2].Length == 88 && Blockchain.CurrentHeight >= 100000; // Unlock transactions at 100k
-                        bool D = Messages[4] == "0" || Blockchain.CurrentHeight >= 1000000; // No fee for transactions to 1M
+                        bool A = Messages[2].Length != 88 && Blockchain.CurrentHeight < 1000; // Unlock nicknames/avatars at 1k
+                        bool B = Messages[2].Length == 88 && Blockchain.CurrentHeight < 10000; // Unlock transactions at 10k
+                        bool C = Messages[4] != "0" && Blockchain.CurrentHeight < 100000; // No fee for transactions to 100k
                         
-                        if((A || B || C) && D)
+                        if(!A && !B && !C)
                         {
                             Transaction Transaction = new();
                             Transaction.From = Messages[1];

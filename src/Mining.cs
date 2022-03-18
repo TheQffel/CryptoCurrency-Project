@@ -483,7 +483,7 @@ namespace OneCoin
             Console.WriteLine("M - Show memory usage.");
             Console.WriteLine("N - Show connected nodes.");
             //Console.WriteLine("O - .");
-            //Console.WriteLine("P - .");
+            Console.WriteLine("P - Show previously mined blocks.");
             //Console.WriteLine("Q - .");
             //Console.WriteLine("R - .");
             Console.WriteLine("S - Start or stop mining.");
@@ -535,7 +535,19 @@ namespace OneCoin
                     }
                     case ConsoleKey.D:
                     {
-                        Console.WriteLine("Current block difficulty is: " + ToBeMined[234].Difficulty);
+                        uint TempHeight = Blockchain.CurrentHeight;
+                        Console.WriteLine("Current block difficulty is: " + Blockchain.GetBlock(TempHeight).Difficulty + "/205");
+                        ulong TimeDiffrence = 0;
+                        for (byte j = 0; j < 10; j++)
+                        {
+                            TimeDiffrence += Blockchain.GetBlock(TempHeight - j).Timestamp - Blockchain.GetBlock(TempHeight - j - 1).Timestamp; 
+                        }
+                        Console.WriteLine("Average block time (10 blocks): " + TimeDiffrence/10 + " seconds");
+                        for (byte j = 10; j < 100; j++)
+                        {
+                            TimeDiffrence += Blockchain.GetBlock(TempHeight - j).Timestamp - Blockchain.GetBlock(TempHeight - j - 1).Timestamp; 
+                        }
+                        Console.WriteLine("Average block time (100 blocks): " + TimeDiffrence/100 + " seconds");
                         break;
                     }
                     case ConsoleKey.E:
@@ -596,6 +608,24 @@ namespace OneCoin
                         Console.WriteLine("You are currently connected to " + Network.ConnectedNodes() + " nodes:");
                         string[] ConnectedNodes = Network.ConnectedNodesAddresses();
                         for (int i = 0; i < ConnectedNodes.Length; i++) {  Console.WriteLine(ConnectedNodes[i]); }
+                        break;
+                    }
+                    case ConsoleKey.P:
+                    {
+                        string MinedBlocks = "";
+                        Console.WriteLine("You mined these blocks (searching only last 1000):");
+                        for (uint i = Blockchain.CurrentHeight; i > Blockchain.CurrentHeight -  1111; i--)
+                        {
+                            if(Blockchain.GetBlock(i).Transactions[0].To == MiningAddress)
+                            {
+                                MinedBlocks += i + ", ";
+                            }
+                        }
+                        if(MinedBlocks.Length < 1)
+                        {
+                            MinedBlocks = "Nothing found... ";
+                        }
+                        Console.WriteLine(MinedBlocks);
                         break;
                     }
                     case ConsoleKey.S:
