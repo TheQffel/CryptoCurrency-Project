@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
@@ -17,6 +18,7 @@ namespace OneCoin
         public static bool CheckUpdates = true;
         public static bool MainMenuLoop = true;
         public static bool DebugLogging = false;
+        public static string RunningVersion = "";
 
         static void Main(string[] Args)
         {
@@ -47,6 +49,28 @@ namespace OneCoin
                     Console.WriteLine("Close app and install missing library. Alternatively, press any key to continue...");
                     Console.ForegroundColor = ConsoleColor.White;
                     Console.ReadKey();
+                }
+            }
+            
+            if(File.Exists(Settings.AppPath + "/version.txt"))
+            {
+                RunningVersion = File.ReadAllText(Settings.AppPath + "/version.txt");
+            }
+            
+            if(Directory.Exists(Settings.BlockchainPath))
+            {
+                string[] Files = Directory.GetFiles(Settings.BlockchainPath);
+
+                for (int i = 0; i < Files.Length; i++)
+                {
+                    string FilePath = "00000000" + Path.GetFileName(Files[i].Replace(".dat",  ""));
+                    string BlockFilePath = Settings.BlockchainPath + "/" + short.Parse(FilePath[^9..^6]) + "M/" + short.Parse(FilePath[^6..^3]) + "K/";
+                    string TransactionsFilePath = Settings.TransactionsPath + "/" + short.Parse(FilePath[^9..^6]) + "M/" + short.Parse(FilePath[^6..^3]) + "K/";
+                    if(!Directory.Exists(BlockFilePath)) { Directory.CreateDirectory(BlockFilePath); }
+                    if(!Directory.Exists(TransactionsFilePath)) { Directory.CreateDirectory(TransactionsFilePath); }
+                    File.Move(Settings.BlockchainPath + "/" + Path.GetFileName(Files[i]), BlockFilePath + Path.GetFileName(Files[i]));
+                    File.Move(Settings.TransactionsPath + "/" + Path.GetFileName(Files[i]), TransactionsFilePath + Path.GetFileName(Files[i]));
+                    Thread.Sleep(1);
                 }
             }
 
@@ -83,7 +107,7 @@ namespace OneCoin
                         case "v": case "version":
                         {
                             MainMenuLoop = false;
-                            Console.WriteLine(File.ReadAllText(Settings.AppPath + "/version.txt"));
+                            Console.WriteLine(RunningVersion);
                             break;
                         }
                         case "debug":
@@ -173,7 +197,13 @@ namespace OneCoin
                                 Settings.Load();
                                 Discord.StartService();
                                 
+                                if(Arguments[1].Length != 88)
+                                {
+                                    string[] Nickname = (Arguments[1].Replace('#', '|') + "|1").Split("|");
+                                    Arguments[1] = Wallets.GetAddress(Nickname[0], byte.Parse(Nickname[1]));
+                                }
                                 Mining.MiningAddress = Arguments[1];
+                                
                                 if (Arguments.Length > 2)
                                 {
                                     int TempCount = int.Parse(Arguments[2]);
@@ -470,11 +500,10 @@ namespace OneCoin
                 {
                     Console.ForegroundColor = ConsoleColor.DarkRed;
                     Console.WriteLine("New version available!");
-                    Console.ForegroundColor = ConsoleColor.White;
                     
+                    Console.ForegroundColor = ConsoleColor.White;
                     Console.WriteLine("Downloading update...");
                     WebClient.DownloadFile("http://github.com/TheQffel/OneCoin/releases/latest/download/" + ReleaseName, Settings.AppPath + "/Update.zip");
-
                     Console.WriteLine("Extracting update...");
                     ZipFile.ExtractToDirectory(Settings.AppPath + "/Update.zip", Settings.UpdatePath, true);
                     for (int i = 0; i < AppFiles.Length; i++)
@@ -486,7 +515,6 @@ namespace OneCoin
                     }
                     File.Move(FileName, FileName + ".backup");
                     FileName = Settings.AppPath + "/Update.zip";
-                    Console.WriteLine("");
                     File.Move(FileName, FileName + ".backup");
                     AppFiles = Directory.GetFiles(Settings.UpdatePath);
                     for (int i = 0; i < AppFiles.Length; i++)
@@ -494,8 +522,12 @@ namespace OneCoin
                         File.Move(Settings.UpdatePath + Path.GetFileName(AppFiles[i]), Settings.AppPath + Path.GetFileName(AppFiles[i]));
                     }
                     File.WriteAllText(Settings.AppPath + "/version.txt", NewVersion);
-
                     Console.WriteLine("Update done, new version will be launched next time you run this app!");
+                    
+                    if(!OperatingSystem.IsWindows() && File.Exists(Settings.AppPath + "/OneCoin"))
+                    {
+                        new Process { StartInfo = new ProcessStartInfo("chmod", "+x " + Settings.AppPath + "/OneCoin") }.Start();
+                    }
                 }
             }
             else

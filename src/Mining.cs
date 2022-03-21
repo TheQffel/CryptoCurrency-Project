@@ -489,7 +489,7 @@ namespace OneCoin
             Console.WriteLine("S - Start or stop mining.");
             Console.WriteLine("T - Change threads count.");
             //Console.WriteLine("U - .");
-            //Console.WriteLine("V - .");
+            Console.WriteLine("V - Show node and miner version.");
             //Console.WriteLine("W - .");
             Console.WriteLine("X - Exit to main menu.");
             //Console.WriteLine("Y - .");
@@ -647,6 +647,11 @@ namespace OneCoin
                             }
                         }
                         StartOrStop(ThreadsCount);
+                        break;
+                    }
+                    case ConsoleKey.V:
+                    {
+                        Console.WriteLine("You are running OneCoin v. " + Program.RunningVersion);
                         break;
                     }
                     case ConsoleKey.X:

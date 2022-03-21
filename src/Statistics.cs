@@ -216,16 +216,18 @@ namespace OneCoin
             ToReplace[0] = Settings.AppPath + "/index.html";
             
             ToReplace[1] = "'NOW'";
-            int X = (DateTime.Now.Second + 60 * DateTime.Now.Minute) * 1000;
-            ToReplace[2] = "" + (float)Mining.HashrateStats[Mining.CurrentHour]/X;
-            ToReplace[3] = "" + (float)Mining.SolutionsStats[Mining.CurrentHour];
+            float X = (DateTime.Now.Second + 60 * DateTime.Now.Minute) * 1000;
+            ToReplace[2] = "" + Mining.HashrateStats[Mining.CurrentHour]/X;
+            ToReplace[3] = "" + Mining.SolutionsStats[Mining.CurrentHour];
 
             for (int i = Mining.CurrentHour+23; i > Mining.CurrentHour; i--)
             {
                 ToReplace[1] = "'" + i%24 + ":00', " + ToReplace[1];
-                ToReplace[2] = (float)Mining.HashrateStats[i%24]/3600000 + ", " + ToReplace[2];
-                ToReplace[3] = (float)Mining.SolutionsStats[i%24] + ", " + ToReplace[3];
+                ToReplace[2] = Mining.HashrateStats[i%24]/3600000f + "; " + ToReplace[2];
+                ToReplace[3] = Mining.SolutionsStats[i%24] + ", " + ToReplace[3];
             }
+            
+            ToReplace[2] = ToReplace[2].Replace(',', '.').Replace(';', ',');
             
             ToReplace[1] = "[" + ToReplace[1] + "]";
             ToReplace[2] = "[" + ToReplace[2] + "]";

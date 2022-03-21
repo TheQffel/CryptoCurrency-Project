@@ -232,7 +232,9 @@ namespace OneCoin
             
             Console.ForegroundColor = ConsoleColor.DarkRed;
             Console.WriteLine("You are not synced at height: " + CurrentHeight);
+            
             Console.ForegroundColor = ConsoleColor.DarkCyan;
+            Thread.Sleep(1000);
             
             for (uint i = CurrentHeight + 1; i < uint.MaxValue; i++)
             {
@@ -279,7 +281,7 @@ namespace OneCoin
                 Console.WriteLine("At least one block was incorrect.");
                 Console.ForegroundColor = ConsoleColor.DarkYellow;
                 Console.WriteLine("Trying again, please wait...");
-                Thread.Sleep(10000);
+                Thread.Sleep(1000);
                 DelBlock(CurrentHeight);
                 TryAgain = false;
                 SyncBlocks();
@@ -375,11 +377,22 @@ namespace OneCoin
             return Result;
         }
         
+        public static string BlockPath(uint Height, bool Main, bool CheckPath = true)
+        {
+            string BlockOrTransaction;
+            string FilePath = "00000000" + Height;
+            if(Main) { BlockOrTransaction = Settings.BlockchainPath; }
+            else { BlockOrTransaction = Settings.TransactionsPath; }
+            FilePath = BlockOrTransaction + short.Parse(FilePath[^9..^6]) + "M/" + short.Parse(FilePath[^6..^3]) + "K/";
+            if(CheckPath) { if(!Directory.Exists(FilePath)) { Directory.CreateDirectory(FilePath); } }
+            return FilePath + Height + ".dat";
+        }
+        
         public static bool BlockExists(uint Height, long NodeId = -1)
         {
             bool AvailableOnNodes = Height == 0;
             if(NodeId > -1) { AvailableOnNodes = NodesChain[NodeId].ContainsKey(Height); }
-            return BlocksInMemory.ContainsKey(Height) || File.Exists(Settings.BlockchainPath + Height + ".dat") || AvailableOnNodes;
+            return BlocksInMemory.ContainsKey(Height) || File.Exists(BlockPath(Height, true, false)) || AvailableOnNodes;
         }
 
         public static uint LastBlockExists()
@@ -391,7 +404,7 @@ namespace OneCoin
             {
                 Change /= 2;
 
-                if(File.Exists(Settings.BlockchainPath + Result + ".dat"))
+                if(File.Exists(BlockPath(Result, true, false)))
                 {
                     Result += Change;
                 }
@@ -402,7 +415,7 @@ namespace OneCoin
             }
             
             Result++;
-            while(!File.Exists(Settings.BlockchainPath + Result + ".dat") && Result > 0)
+            while(!File.Exists(BlockPath(Result, true, false)) && Result > 0)
             {
                 Result--;
             }
@@ -444,13 +457,13 @@ namespace OneCoin
             {
                 BlocksInMemory.Remove(Height);
             }
-            if (File.Exists(Settings.BlockchainPath + Height + ".dat"))
+            if (File.Exists(BlockPath(Height, true)))
             {
-                File.Delete(Settings.BlockchainPath + Height + ".dat");
+                File.Delete(BlockPath(Height, true));
             }
-            if(File.Exists(Settings.TransactionsPath + Height + ".dat"))
+            if(File.Exists(BlockPath(Height, false)))
             {
-                File.Delete(Settings.TransactionsPath + Height + ".dat");
+                File.Delete(BlockPath(Height, false));
             }
             
             if(Height <= CurrentHeight)
@@ -472,7 +485,7 @@ namespace OneCoin
             }
 
             byte Timeout = 0;
-            while ((!File.Exists(Settings.BlockchainPath + Height + ".dat") || !File.Exists(Settings.TransactionsPath + Height + ".dat")) && Timeout++ < 100)
+            while ((!File.Exists(BlockPath(Height, true, false)) || !File.Exists(BlockPath(Height, false, false))) && Timeout++ < 100)
             {
                 Task.Run(() => Network.Send(Network.RandomClient(out _), null, new [] { "Block", "Get", Height.ToString() } ));
                 
@@ -481,8 +494,8 @@ namespace OneCoin
             
             lock (FileSystemRead)
             {
-                using BinaryReader BlockFile = new(File.Open(Settings.BlockchainPath + Height + ".dat", FileMode.Open));
-                using BinaryReader TransactionsFile = new(File.Open(Settings.TransactionsPath + Height + ".dat", FileMode.Open));
+                using BinaryReader BlockFile = new(File.Open(BlockPath(Height, true), FileMode.Open));
+                using BinaryReader TransactionsFile = new(File.Open(BlockPath(Height, false), FileMode.Open));
 
                 OneBlock = new();
                 OneBlock.BlockHeight = Height;
@@ -517,8 +530,8 @@ namespace OneCoin
         {
             lock (FileSystemWrite)
             {
-                using BinaryWriter BlockFile = new(File.Open(Settings.BlockchainPath + OneBlock.BlockHeight + ".dat", FileMode.Create));
-                using BinaryWriter TransactionsFile = new(File.Open(Settings.TransactionsPath + OneBlock.BlockHeight + ".dat", FileMode.Create));
+                using BinaryWriter BlockFile = new(File.Open(BlockPath(OneBlock.BlockHeight, true), FileMode.Create));
+                using BinaryWriter TransactionsFile = new(File.Open(BlockPath(OneBlock.BlockHeight, false), FileMode.Create));
 
                 BlockFile.Write(OneBlock.PreviousHash);
                 BlockFile.Write(OneBlock.CurrentHash);

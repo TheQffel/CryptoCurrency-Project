@@ -31,6 +31,7 @@ namespace OneCoin
                     byte[] Data = Listener.Receive(ref Reciever);
                     Sender.Connect(Reciever);
                     Action(null, Sender, Encoding.UTF8.GetString(Data, 0, Data.Length).Split("~"));
+                    Thread.Sleep(100);
                     Sender.Dispose();
                 }
             }
@@ -214,8 +215,13 @@ namespace OneCoin
             }
         }
 
-        public static void Discover(string Ip, int Port = 10101)
+        public static void Discover(string Ip, int Port = 10101, int Delay = -1)
         {
+            if(Delay > 0)
+            {
+                Thread.Sleep(Delay);
+            }
+            
             try
             {
                 if(ConnectedNodes(true) < 16)
@@ -293,6 +299,8 @@ namespace OneCoin
 
         public static void FlushConnections()
         {
+            Broadcast(new[] { "Nodes", "Restart" });
+            
             try
             {
                 for (int i = 0; i < 256; i++)
@@ -423,6 +431,18 @@ namespace OneCoin
                             {
                                 Task.Run(() => Discover(Nodes[i].Split(":")[0]));
                                 Thread.Sleep(100);
+                            }
+                        }
+                        if (Messages[1].ToLower() == "restart")
+                        {
+                            if(TcpClient != null)
+                            {
+                                IPEndPoint NodeAddress = (IPEndPoint)TcpClient.Client.RemoteEndPoint;
+                                
+                                if(NodeAddress.Port == 10101)
+                                {
+                                    Task.Run(() => Discover(NodeAddress.Address.MapToIPv4().ToString(), 10101, 100000));
+                                }
                             }
                         }
                     }
