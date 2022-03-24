@@ -13,7 +13,6 @@ namespace OneCoin
         public static bool KeepMining = false;
         public static bool PauseMining = false;
         public static string MiningAddress = "";
-        public static string PoolAddress = "";
         public static bool MonitorMining = false;
         public static byte ThreadsCount = (byte)Environment.ProcessorCount;
 
@@ -126,7 +125,7 @@ namespace OneCoin
             }
         }
         
-        public static void PrepareToMining(Block CurrentBlock, byte CustomDifficulty = 0)
+        public static void PrepareToMining(Block CurrentBlock)
         {
             PauseMining = true;
             Thread.Sleep(100);
@@ -137,7 +136,6 @@ namespace OneCoin
             ulong TimestampDifferences = 5;;
             bool CanBeChanged = true;
 
-            
             for (uint i = 0; i < 10; i++)
             {
                 if(!Blockchain.BlockExists(CurrentBlock.BlockHeight - (i + 1))) { if(Program.DebugLogging) { Console.WriteLine("Cannot prepare to mine: Missing blocks!"); } return; }
@@ -168,8 +166,7 @@ namespace OneCoin
                     ToBeMined[i] = new();
                     ToBeMined[i].BlockHeight = NewBlockHeight;
                     ToBeMined[i].PreviousHash = CurrentBlock.CurrentHash;
-                    if (CustomDifficulty > 1) { ToBeMined[i].Difficulty = CustomDifficulty; }
-                    else { ToBeMined[i].Difficulty = NextDifficulty; }
+                    ToBeMined[i].Difficulty = NextDifficulty;
                 }
                 MinerReward.From = "OneCoin";
                 MinerReward.To = MiningAddress;
@@ -178,11 +175,24 @@ namespace OneCoin
                 MinerReward.Timestamp = NewBlockHeight;
                 MinerReward.Message = "";
                 MinerReward.Signature = NewBlockHeight + "";
+                
+                if(Pool.PoolAddress.Length > 5)
+                {
+                    MinerReward.To = Pool.PoolWallet;
+                    if(Pool.CustomDifficulty > 200)
+                    {
+                        Network.Send(Pool.PoolNode, null, new[] { "Pool", "Info", "Get" });
+                    }
+                }
             }
             UpdateTransactions();
-            ImageData = Media.GenerateImage();
+            
             MessageData = Media.GenerateMessage();
-
+            ImageData = Media.GenerateImage();
+            
+            if(Pool.PoolMessage.Length > 1) { MessageData = Pool.PoolMessage; }
+            if(Pool.PoolImage.Length > 1) { ImageData = Pool.PoolImage; }
+            
             if (Program.DebugLogging) { Console.WriteLine("Block difficulty: " + NextDifficulty); }
 
             Thread.Sleep(100);
@@ -308,6 +318,8 @@ namespace OneCoin
                     }
                     else
                     {
+                        byte CustomDifficulty = ToBeMined[Index].Difficulty;
+                        if(Pool.PoolAddress.Length > 5) { CustomDifficulty = Pool.CustomDifficulty; }
                         StringBuilder RandomData = new StringBuilder(ImageData + "|" + MessageData + "|");
                     
                         for (int i = RandomData.Length; i < 4096; i++)
@@ -319,10 +331,10 @@ namespace OneCoin
                         ToBeMined[Index].ExtraData = RandomData.ToString();
                         ToBeMined[Index].RecalculateHash(false);
 
-                        if (CheckSolution(ToBeMined[Index].CurrentHash, ToBeMined[Index].Difficulty))
+                        if (CheckSolution(ToBeMined[Index].CurrentHash, CustomDifficulty))
                         {
                             if (Program.DebugLogging) { Console.WriteLine("Solution found, verifying now."); }
-                            lock (ToBeMined[Index]) { SolutionFound(ToBeMined[Index]); }
+                            lock (ToBeMined[Index]) { SolutionFound(ToBeMined[Index], CustomDifficulty); }
                         }
 
                         TotalHashes++;
@@ -341,11 +353,11 @@ namespace OneCoin
             }
         }
 
-        static void SolutionFound(Block ToBeChecked)
+        static void SolutionFound(Block ToBeChecked, byte CustomDifficulty)
         {
             lock (ToBeChecked)
             {
-                if (ToBeChecked.CheckBlockCorrect())
+                if (ToBeChecked.CheckBlockCorrect(-1, CustomDifficulty))
                 {
                     if (Program.DebugLogging) { Console.WriteLine("Solution is correct."); }
 
@@ -374,16 +386,16 @@ namespace OneCoin
                         BlockData[15 + i * 7] = ToBeChecked.Transactions[i].Signature;
                     }
                     
-                    Network.Broadcast(BlockData);
-                    
-                    if(PoolAddress.Length > 5)
+                    if(Pool.PoolAddress.Length > 5)
                     {
-                        UdpClient Client = new UdpClient();
-                        Client.Connect(PoolAddress, 10101);
-                        Task.Run(() => Network.Send(null, Client, BlockData));
-                        Thread.Sleep(1000);
-                        Client.Close();
-                        Client.Dispose();
+                        BlockData[0] = "Pool";
+                        BlockData[1] = "Share";
+                        BlockData[7] += "-" + MiningAddress;
+                        Network.Send(Pool.PoolNode, null, BlockData);
+                    }
+                    else
+                    {
+                        Network.Broadcast(BlockData);
                     }
 
                     if(MonitorMining)
@@ -399,7 +411,7 @@ namespace OneCoin
                         Console.WriteLine("Your total speed of all threads is:");
                         Console.WriteLine(Rates[1] + " ≈ " + Rates[2] + " ≈ " + Rates[3]);
                         Console.WriteLine("Your total memory consumption is:");
-                        Console.WriteLine(Memories[0] + " ≈ " + Memories[1] + " ≈ " + Memories[2] + " ≈ " + Memories[3]);
+                        Console.WriteLine(Memories[1] + " ≈ " + Memories[2] + " ≈ " + Memories[3]);
                         Console.WriteLine("You are mining to address: " + MiningAddress[..10] + "..." + MiningAddress[^10..]);
                         Console.WriteLine("Current balance of this address: " + Balance);
                         Console.WriteLine("");
@@ -537,6 +549,10 @@ namespace OneCoin
                     {
                         uint TempHeight = Blockchain.CurrentHeight;
                         Console.WriteLine("Current block difficulty is: " + Blockchain.GetBlock(TempHeight).Difficulty + "/205");
+                        if(Pool.CustomDifficulty < 200)
+                        {
+                            Console.WriteLine("Pool difficulty is: " + Blockchain.GetBlock(TempHeight).Difficulty + "/205");
+                        }
                         ulong TimeDiffrence = 0;
                         for (byte j = 0; j < 10; j++)
                         {
@@ -600,7 +616,7 @@ namespace OneCoin
                     {
                         string[] Memories = GetMemories();
                         Console.WriteLine("Your total memory consumption is:");
-                        Console.WriteLine(Memories[0] + " ≈ " + Memories[1] + " ≈ " + Memories[2] + " ≈ " + Memories[3]);
+                        Console.WriteLine(Memories[1] + " ≈ " + Memories[2] + " ≈ " + Memories[3]);
                         break;
                     }
                     case ConsoleKey.N:

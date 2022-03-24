@@ -109,7 +109,7 @@ namespace OneCoin
             }
         }
 
-        public bool CheckBlockCorrect(long NodeId = -1)
+        public bool CheckBlockCorrect(long NodeId = -1, byte CustomDifficulty = 0)
         {
             // Mode Types: 1: Only length checking.
             // 2: Hex (Lower), 3: Base32 (Upper),
@@ -133,7 +133,10 @@ namespace OneCoin
             
             if (PreviousHash == CurrentHash) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Missing historical blocks."); } }
             if (PreviousHash != PreviousBlock.CurrentHash) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong previous hash."); } }
-            if(!Mining.CheckSolution(CurrentHash, Difficulty)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong current hash."); } }
+            
+            byte TempHashDifficulty = Difficulty;
+            if(CustomDifficulty > 1) { TempHashDifficulty = CustomDifficulty; }
+            if(!Mining.CheckSolution(CurrentHash, TempHashDifficulty)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong current hash."); } }
 
             if (!Hashing.CheckStringFormat(PreviousHash, 3, 205, 205)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong previous hash format."); } }
             if (!Hashing.CheckStringFormat(CurrentHash, 3, 205, 205)) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong current hash format."); } }
@@ -146,8 +149,11 @@ namespace OneCoin
             if (Timestamp <= PreviousBlock.Timestamp) { Correct = false; if (Program.DebugLogging) { Console.WriteLine("Block " + BlockHeight + " is incorrect: Wrong timestamp."); } }
 
             byte NextDifficulty = PreviousBlock.Difficulty;
-
-            if (BlockHeight < 11) { NextDifficulty = (byte)BlockHeight; }
+            
+            if (BlockHeight < 11)
+            {
+                NextDifficulty = (byte)BlockHeight;
+            }
             else
             {
                 ulong TimestampDifferences = 5;

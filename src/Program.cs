@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.IO.Ports;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -90,15 +91,19 @@ namespace OneCoin
                             Console.WriteLine("-debug");
                             Console.WriteLine("-skipupdate");
                             Console.WriteLine("-forceupdate");
-                            Console.WriteLine("-mining:[address]:(threads):(pool)");
                             Console.WriteLine("-syncspeed:[speed]");
-                            Console.WriteLine("-database:[host]:[user]:[pass]:[db]:(avatarsdir):(qrcodesdir):(blocksdir)");
+                            Console.WriteLine("-mining:[address]:(threads):(pooladdress):(poolport)");
+                            Console.WriteLine("-database:[host]:[user]:[pass]:[db]");
+                            Console.WriteLine("-storeusers:(avatarsdir):(qrcodesdir)");
+                            Console.WriteLine("-storeblocks:(blocksdir)");
                             Console.WriteLine("-generatesignature:[key]:[message]");
                             Console.WriteLine("-verifysignature:[address]:[signature]:[message]");
                             Console.WriteLine("-generatemnemonics");
                             Console.WriteLine("-getkeyfrommnemonics:[mnemonic1]:(mnemonic2):(mnemonic3)...");
                             Console.WriteLine("-getaddressfromkey:[key]");
+                            Console.WriteLine("-testnode:[ipaddress]:(port)");
                             Console.WriteLine("-sendpacket:[ipaddress]:[message1]:(message2):(message3)...");
+                            Console.WriteLine("-runaspool:[privatekey]:[difficulty]");
                             Console.WriteLine("  Info:");
                             Console.WriteLine("Words in [] are required parameters.");
                             Console.WriteLine("Words in () are optional parameters.");
@@ -166,6 +171,7 @@ namespace OneCoin
                             MainMenuLoop = false;
                             if (Arguments.Length > 1)
                             {
+                                Settings.CheckPaths();
                                 if (CheckUpdates)
                                 {
                                     CheckForUpdates();
@@ -193,10 +199,9 @@ namespace OneCoin
                                 Task.Run(() => Mining.MiningWatchdog());
                                 Blockchain.FixCorruptedBlocks();
                                 Blockchain.SyncBlocks();
-
-                                Settings.Load();
-                                Discord.StartService();
                                 
+                                Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
+
                                 if(Arguments[1].Length != 88)
                                 {
                                     string[] Nickname = (Arguments[1].Replace('#', '|') + "|1").Split("|");
@@ -215,8 +220,16 @@ namespace OneCoin
                                 }
                                 if (Arguments.Length > 3)
                                 {
-                                    Mining.PoolAddress = Arguments[3];
+                                    Pool.PoolAddress = Arguments[3];
+                                    if (Arguments.Length > 4)
+                                    {
+                                        Pool.PoolPort = int.Parse(Arguments[4]);
+                                    }
+                                    Task.Run(() => Pool.ConnectionLoop());
                                 }
+                                
+                                Settings.Load();
+                                Discord.StartService();
                                 
                                 WelcomeScreen();
                                 Mining.StartOrStop(Mining.ThreadsCount);
@@ -226,8 +239,9 @@ namespace OneCoin
                                 
                                 Discord.StopService();
                                 Settings.Save();
+                                
                                 Task.Run(() => Network.FlushConnections());
-                                Blockchain.DatabaseHost = "";
+                                Database.DatabaseHost = "";
                             }
                             else
                             {
@@ -239,30 +253,103 @@ namespace OneCoin
                         {
                             if (Arguments.Length > 4)
                             {
-                                Blockchain.DatabaseHost = Arguments[1];
-                                Blockchain.DatabaseUser = Arguments[2];
-                                Blockchain.DatabasePass = Arguments[3];
-                                Blockchain.DatabaseDb = Arguments[4];
+                                Database.DatabaseHost = Arguments[1];
+                                Database.DatabaseUser = Arguments[2];
+                                Database.DatabasePass = Arguments[3];
+                                Database.DatabaseDb = Arguments[4];
                                 
-                                if (Arguments.Length > 5)
-                                {
-                                    Blockchain.TempAvatarsPath = Arguments[5];
-                                }
-                                if (Arguments.Length > 6)
-                                {
-                                    Blockchain.TempQrCodesPath = Arguments[6];
-                                }
-                                if (Arguments.Length > 7)
-                                {
-                                    Blockchain.TempBlocksPath = Arguments[7];
-                                }
-                                
-                                Task.Run(() => Blockchain.DatabaseSync());
+                                Task.Run(() => Database.DatabaseSync());
                             }
                             else
                             {
                                 Console.WriteLine("To few arguments, use \"OneCoin -help\", to get all possible commands with arguments...");
                             }
+                            break;
+                        }
+                        case "runaspool":
+                        {
+                            MainMenuLoop = false;
+                            if (Arguments.Length > 2)
+                            {
+                                Settings.CheckPaths();
+                                if (CheckUpdates)
+                                {
+                                    CheckForUpdates();
+                                }
+                                
+                                Database.StorePoolData = true;
+                                Console.WriteLine("Starting pool, please wait...");
+                                Task.Run(() => Network.ListenForConnections());
+                                Task.Run(() => Network.ListenForPackets());
+                    
+                                Console.WriteLine("Searching for verified nodes...");
+                                Network.SearchVerifiedNodes();
+                    
+                                while(Network.ConnectedNodes(true) == 0)
+                                {
+                                    Console.WriteLine("You are not connected to any nodes!");
+                                    Console.WriteLine("Make sure you have internet connection!");
+                                    Console.WriteLine("Trying again in 10 seconds...");
+                                    Thread.Sleep(10000);
+                                    Console.WriteLine("Searching for verified nodes...");
+                                    Network.SearchVerifiedNodes();
+                                }
+                    
+                                Console.WriteLine("Synchronising blocks...");
+                                Blockchain.CurrentHeight = Blockchain.LastBlockExists();
+                                Task.Run(() => Mining.MiningWatchdog());
+                                Blockchain.FixCorruptedBlocks();
+                                Blockchain.SyncBlocks();
+                                
+                                Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
+
+                                Pool.PoolKey = Arguments[1];
+                                Mining.MiningAddress = Account.GetPublicKeyFromPrivateKey(Pool.PoolKey);
+                                Mining.MiningAddress = Wallets.AddressToShort(Mining.MiningAddress);
+                                Pool.CustomDifficulty = byte.Parse(Arguments[2]);
+                                Pool.PoolWallet = Mining.MiningAddress;
+                                
+                                Settings.Load();
+                                Discord.StartService();
+                                
+                                WelcomeScreen();
+                                Mining.Menu();
+                                Mining.KeepMining = false;
+                                Console.WriteLine("Thank you for using One Coin! Hope to see you soon :)");
+                                
+                                Discord.StopService();
+                                Settings.Save();
+                                
+                                Task.Run(() => Network.FlushConnections());
+                                Database.DatabaseHost = "";
+                            }
+                            else
+                            {
+                                Console.WriteLine("To few arguments, use \"OneCoin -help\", to get all possible commands with arguments...");
+                            }
+                            break;
+                        }
+                        case "storeusers":
+                        {
+                            if (Arguments.Length > 1)
+                            {
+                                Blockchain.TempAvatarsPath = Arguments[1];
+                                
+                                if (Arguments.Length > 2)
+                                {
+                                    Blockchain.TempQrCodesPath = Arguments[2];
+                                }
+                            }
+                            Database.StoreUsersData = true;
+                            break;
+                        }
+                        case "storeblocks":
+                        {
+                            if (Arguments.Length > 1)
+                            {
+                                Blockchain.TempBlocksPath = Arguments[1];
+                            }
+                            Database.StoreBlocksData = true;
                             break;
                         }
                         case "generatesignature":
@@ -354,6 +441,38 @@ namespace OneCoin
                             }
                             break;
                         }
+                        case "testnode":
+                        {
+                            MainMenuLoop = false;
+                            if (Arguments.Length > 1)
+                            {
+                                int Port = 10101;
+                                if (Arguments.Length > 2)
+                                {
+                                    Port = int.Parse(Arguments[2]);
+                                }
+                                
+                                try
+                                {
+                                    TcpClient Test = new();
+                                    Test.Connect(IPAddress.Parse(Arguments[1]), Port);
+                                    Test.GetStream().Write(Encoding.UTF8.GetBytes("Block~Get~X").Concat(new byte[] { 4 }).ToArray());
+                                    Test.GetStream().ReadByte();
+                                    Test.Close();
+                                    
+                                    Console.Write(true);
+                                }
+                                catch (Exception Ex)
+                                {
+                                    Console.Write(false);
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine("To few arguments, use \"OneCoin -help\", to get all possible commands with arguments...");
+                            }
+                            break;
+                        }
                         case "sendpacket":
                         {
                             MainMenuLoop = false;
@@ -414,6 +533,8 @@ namespace OneCoin
                     Task.Run(() => Mining.MiningWatchdog());
                     Blockchain.FixCorruptedBlocks();
                     Blockchain.SyncBlocks();
+                    
+                    Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
 
                     Settings.Load();
                     Discord.StartService();
@@ -421,7 +542,7 @@ namespace OneCoin
                     Discord.StopService();
                     Settings.Save();
                     Task.Run(() => Network.FlushConnections());
-                    Blockchain.DatabaseHost = "";
+                    Database.DatabaseHost = "";
                     
                     if (CheckUpdates)
                     {

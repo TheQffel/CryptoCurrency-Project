@@ -177,7 +177,6 @@ namespace OneCoin
                 Peers[Index] = Client;
                 IsListening[Index] = Listening;
                 NetworkStream Stream = Peers[Index].GetStream();
-
                 byte[] Buffer = new byte[ushort.MaxValue];
                 int ByteIndex = 0;
                 int ByteValue = 0;
@@ -273,7 +272,8 @@ namespace OneCoin
         {
             try
             { 
-                string LatestNodes = new WebClient().DownloadString("http://one-coin.org/verifiednodes.txt");
+                string LatestNodes = new WebClient().DownloadString("http://one-coin.org/verifiednodes.txt").Replace("<br>", "\n");
+                //string LatestNodes = new WebClient().DownloadString("http://one-coin.org/nodes/").Replace("<br>", "\n");
                 File.WriteAllText(Settings.AppPath + "/nodes.txt", LatestNodes);
             }
             catch (Exception Ex)
@@ -688,6 +688,69 @@ namespace OneCoin
                             if (Messages[2].ToLower() == "get")
                             {
                                 Task.Run(() => Send(TcpClient, UdpClient, new[] { "Service", "Info", "Set", Messages[3], Wallets.GetName(Messages[3]), Wallets.GetAvatar(Messages[3]) }));
+                            }
+                        }
+                    }
+                    break;
+                }
+                case "pool":
+                {
+                    if(Messages.Length > 2)
+                    {
+                        if (Messages[1].ToLower() == "share" && Pool.PoolKey.Length > 10)
+                        {
+                            if (Messages.Length > 15)
+                            {
+                                string Miner = Messages[7].Split("-")[1];
+                                Messages[7] = Messages[7].Split("-")[0];
+                                Block PoolBlock = new();
+
+                                PoolBlock.BlockHeight = uint.Parse(Messages[2]);
+                                PoolBlock.PreviousHash = Messages[3];
+                                PoolBlock.CurrentHash = Messages[4];
+                                PoolBlock.Timestamp = ulong.Parse(Messages[5]);
+                                PoolBlock.Difficulty = byte.Parse(Messages[6]);
+                                PoolBlock.ExtraData = Messages[7];
+                                PoolBlock.Transactions = new Transaction[ushort.Parse(Messages[8])];
+
+                                for (int i = 0; i < PoolBlock.Transactions.Length; i++)
+                                {
+                                    PoolBlock.Transactions[i] = new();
+                                    PoolBlock.Transactions[i].From = Messages[9 + i * 7];
+                                    PoolBlock.Transactions[i].To = Messages[10 + i * 7];
+                                    PoolBlock.Transactions[i].Amount = BigInteger.Parse(Messages[11 + i * 7]);
+                                    PoolBlock.Transactions[i].Fee = ulong.Parse(Messages[12 + i * 7]);
+                                    PoolBlock.Transactions[i].Timestamp = ulong.Parse(Messages[13 + i * 7]);
+                                    PoolBlock.Transactions[i].Message = Messages[14 + i * 7];
+                                    PoolBlock.Transactions[i].Signature = Messages[15 + i * 7];
+                                }
+                                
+                                if(Pool.ProcessShare(PoolBlock, Miner))
+                                {
+                                    if(PoolBlock.CheckBlockCorrect())
+                                    {
+                                        Messages[0] = "Block";
+                                        Messages[1] = "Set";
+                                        
+                                        Broadcast(Messages);
+                                    }
+                                }
+                            }
+                        }
+                        if (Messages[1].ToLower() == "info")
+                        {
+                            if(Messages[2].ToLower() == "get" && Pool.PoolKey.Length > 10)
+                            {
+                                Send(TcpClient, UdpClient, new [] { "Pool", "Info", "Set", Mining.MiningAddress, Pool.CustomDifficulty.ToString(), Media.GenerateMessage(), Media.GenerateImage() });
+                            }
+                            if(Messages[2].ToLower() == "set" && Pool.PoolAddress.Length > 5)
+                            {
+                                Pool.PoolWallet = Messages[3];
+                                Pool.CustomDifficulty = byte.Parse(Messages[4]);
+                                Pool.PoolMessage = Messages[5];
+                                Pool.PoolImage = Messages[6];
+                                
+                                Mining.PrepareToMining(Blockchain.GetBlock(Blockchain.CurrentHeight));
                             }
                         }
                     }
