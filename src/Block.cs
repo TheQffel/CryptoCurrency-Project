@@ -199,11 +199,7 @@ namespace OneCoin
 
             for (int i = 1; i < Transactions.Length; i++)
             {
-                bool A = Transactions[i].To.Length != 88 && BlockHeight < 1000; // Unlock nicknames/avatars at 1k
-                bool B = Transactions[i].To.Length == 88 && BlockHeight < 10000; // Unlock transactions at 10k
-                bool C = Transactions[i].Fee > 0 && BlockHeight < 100000; // No fee for transactions to 100k
-                
-                if(A || B || C) { Correct = false; }
+                if(Transactions[i].Fee > 0 && BlockHeight < 100000) { Correct = false; }
                 
                 if (!UserTransactions.ContainsKey(Transactions[i].From))
                 {

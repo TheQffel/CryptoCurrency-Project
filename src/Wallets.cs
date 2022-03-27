@@ -5,8 +5,10 @@ using Org.BouncyCastle.Security;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Numerics;
 using System.Text;
+using System.Threading;
 using ZXing;
 
 namespace OneCoin
@@ -21,6 +23,68 @@ namespace OneCoin
         
         public static Dictionary<string, KeyValuePair<string, uint>> NicknameCache = new();
         public static Dictionary<string, KeyValuePair<string, uint>> AvatarsCache = new();
+        
+        public static List<string> AddressToUpdate = null;
+        public static string TempAvatarsPath = "";
+        public static string TempQrCodesPath = "";
+        
+        public static void DatabaseSync()
+        {
+            while(Blockchain.SyncMode) { Thread.Sleep(1000); }
+            
+            AddressToUpdate = new();
+            
+            for (uint i = 0; i < Blockchain.CurrentHeight; i++)
+            {
+                Block ToInsert = Blockchain.GetBlock(i);
+                
+                for (int j = 0; j < ToInsert.Transactions.Length; j++)
+                {      
+                    if(ToInsert.Transactions[j].To.Length == 88)
+                    {
+                        if(!AddressToUpdate.Contains(ToInsert.Transactions[j].To))
+                        {
+                            AddressToUpdate.Add(ToInsert.Transactions[j].To);
+                        }
+                    }
+                }
+            }
+            
+            while (Database.DatabaseHost.Length > 5)
+            {
+                for(int i = 0; i < AddressToUpdate.Count; i++)
+                {
+                    Thread.Sleep(1000);
+                    
+                    if(Program.DebugLogging)
+                    {
+                        Console.WriteLine("Updating user: " + AddressToUpdate[i]);
+                    }
+                    
+                    string[] Temp = (GetName(AddressToUpdate[i]) + "|1").Split("|");
+                    Temp = new [] { GetBalance(AddressToUpdate[i]).ToString(), Temp[0], Temp[1], GetAvatar(AddressToUpdate[i]) };
+                    
+                    if(Database.Set("onecoin", "Balance='" + Temp[0] + "', Nickname='" + Temp[1] + "', Tag='" + Temp[2] + "', Avatar='" + Temp[3] + "'", "Address='" + AddressToUpdate[i] + "'") < 1)
+                    {
+                        Database.Add("onecoin", "Address, Balance, Nickname, Tag, Avatar", "'" + AddressToUpdate[i] + "', '" + Temp[0] + "', '" + Temp[1] + "', '" + Temp[2] + "', '" + Temp[3] + "'");
+                    }
+                    
+                    if(TempAvatarsPath.Length > 1 && Temp[3].Length > 9)
+                    {
+                        Media.TextToImage(Temp[3]).Save(TempAvatarsPath + "/" + AddressToUpdate[i] + ".png", ImageFormat.Png);
+                    }
+                    if(TempQrCodesPath.Length > 1)
+                    {
+                        Bitmap QrCode = GenerateQrCode(AddressToUpdate[i]);
+                        new Bitmap(QrCode, QrCode.Width*4, QrCode.Height*4).Save(TempQrCodesPath + "/" + AddressToUpdate[i] + ".png", ImageFormat.Png);
+                    }
+                }
+            
+                AddressToUpdate.Clear();
+                
+                Thread.Sleep(10000);
+            }
+        }
         
         public static void UpdateNicknamesAvatarsCache()
         {

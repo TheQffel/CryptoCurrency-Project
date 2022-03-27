@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
 using System.Threading;
@@ -548,11 +547,11 @@ namespace OneCoin
                     case ConsoleKey.D:
                     {
                         uint TempHeight = Blockchain.CurrentHeight;
-                        Console.WriteLine("Current block difficulty is: " + Blockchain.GetBlock(TempHeight).Difficulty + "/205");
                         if(Pool.CustomDifficulty < 200)
                         {
-                            Console.WriteLine("Pool difficulty is: " + Blockchain.GetBlock(TempHeight).Difficulty + "/205");
+                            Console.WriteLine("Current pool difficulty is: " + Pool.CustomDifficulty + "/205");
                         }
+                        Console.WriteLine("Current block difficulty is: " + Blockchain.GetBlock(TempHeight).Difficulty + "/205");
                         ulong TimeDiffrence = 0;
                         for (byte j = 0; j < 10; j++)
                         {
@@ -629,8 +628,8 @@ namespace OneCoin
                     case ConsoleKey.P:
                     {
                         string MinedBlocks = "";
-                        Console.WriteLine("You mined these blocks (searching only last 1000):");
-                        for (uint i = Blockchain.CurrentHeight; i > Blockchain.CurrentHeight -  1111; i--)
+                        Console.WriteLine("You mined these blocks (searching only last 10.000):");
+                        for (uint i = Blockchain.CurrentHeight; i > Blockchain.CurrentHeight - 9999; i--)
                         {
                             if(Blockchain.GetBlock(i).Transactions[0].To == MiningAddress)
                             {

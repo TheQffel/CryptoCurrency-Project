@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace OneCoin
 {
@@ -22,17 +20,95 @@ namespace OneCoin
         static readonly object FileSystemWrite = new();
         static readonly object WholeBlockchain = new();
 
-        public static string TempAvatarsPath = "";
-        public static string TempQrCodesPath = "";
         public static string TempBlocksPath = "";
-        
-        public static List<string> AllKnownAddresses = new();
-        
+
         public static Dictionary<long, Dictionary<uint, Block>> NodesChain = new();
         public static Dictionary<long, bool> NodesLock = new();
         public static Dictionary<long, uint> NodesMin = new();
         public static Dictionary<long, uint> NodesMax = new();
 
+        public static void DatabaseSync()
+        {
+            while(SyncMode) { Thread.Sleep(1000); }
+            
+            string Tmp = Database.Get("blocks", "BlockHeight", "", "BlockHeight DESC", 1)[0][0];
+            if(Tmp.Length < 1)
+            {
+                Tmp = "0";
+                Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash", "'0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0', '1ONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOINONECOIN0'");
+            }
+            uint DbHeight = uint.Parse(Tmp) + 1;
+            
+            while (Database.DatabaseHost.Length > 5)
+            {
+                for (; DbHeight < CurrentHeight; DbHeight++)
+                {
+                    Thread.Sleep(1000);
+                    
+                    Block ToInsert = GetBlock(DbHeight);
+                    
+                    string Hash = Database.Get("blocks", "CurrentHash", "BlockHeight='" + (DbHeight - 1) + "'")[0][0];
+                    
+                    if(Hash == ToInsert.PreviousHash)
+                    {
+                        if(Program.DebugLogging)
+                        {
+                            Console.WriteLine("Adding block and transactions to database: " + DbHeight);
+                        }
+                        
+                        Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash, Timestamp, Difficulty, Message, Image, ExtraData", "'" + ToInsert.BlockHeight + "', '" + ToInsert.PreviousHash + "', '" + ToInsert.CurrentHash + "', '" + ToInsert.Timestamp + "', '" + ToInsert.Difficulty + "', '" + ToInsert.ExtraData.Split('|')[1] + "', '" + ToInsert.ExtraData.Split('|')[0] + "', '" + ToInsert.ExtraData.Split('|')[2] + "'");
+                        
+                        if(TempBlocksPath.Length > 1)
+                        {
+                            Media.TextToImage(ToInsert.ExtraData.Split('|')[0]).Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
+                        }
+
+                        for (int j = 0; j < ToInsert.Transactions.Length; j++)
+                        {
+                            Thread.Sleep(100);
+                        
+                            Database.Add("transactions", "BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature", "'" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Timestamp + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "'");
+                            
+                            if(Wallets.AddressToUpdate != null)
+                            {
+                                if(ToInsert.Transactions[j].From.Length == 88)
+                                {
+                                    if(!Wallets.AddressToUpdate.Contains(ToInsert.Transactions[j].From))
+                                    {
+                                        Wallets.AddressToUpdate.Add(ToInsert.Transactions[j].From);
+                                    }
+                                }
+                                
+                                if(ToInsert.Transactions[j].To.Length == 88)
+                                {
+                                    if(!Wallets.AddressToUpdate.Contains(ToInsert.Transactions[j].To))
+                                    {
+                                        Wallets.AddressToUpdate.Add(ToInsert.Transactions[j].To);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        DbHeight--;
+                        
+                        if(Program.DebugLogging)
+                        {
+                            Console.WriteLine("Removing previous block with wrong hash: " + DbHeight);
+                        }
+                        
+                        Database.Del("blocks", "BlockHeight='" + DbHeight + "'");
+                        Database.Del("transactions", "BlockHeight='" + DbHeight + "'");
+                        
+                        DbHeight--;
+                    }
+                }
+                
+                Thread.Sleep(10000);
+            }
+        }
+        
         public static void FixCorruptedBlocks()
         {
             bool DeleteNow = false;
@@ -106,7 +182,7 @@ namespace OneCoin
                     if(!Nodes[NodeIndex])
                     {
                         Nodes[NodeIndex] = !Nodes[NodeIndex];
-                        Task.Run(() => Network.Send(RandomNode, null, new [] { "Block", "Get", i.ToString() } ));
+                        Network.Send(RandomNode, null, new [] { "Block", "Get", i.ToString() } );
                     }
 
                     Thread.Sleep(SyncSpeed);
@@ -343,7 +419,7 @@ namespace OneCoin
             byte Timeout = 0;
             while ((!File.Exists(BlockPath(Height, true, false)) || !File.Exists(BlockPath(Height, false, false))) && Timeout++ < 100)
             {
-                Task.Run(() => Network.Send(Network.RandomClient(out _), null, new [] { "Block", "Get", Height.ToString() } ));
+                Network.Send(Network.RandomClient(out _), null, new [] { "Block", "Get", Height.ToString() } );
                 
                 Thread.Sleep(100);
             }

@@ -21,8 +21,36 @@ namespace OneCoin
         
         public static uint ShareHeight = 0;
         public static bool SynchronisingNow = false;
-        public static Dictionary<string, byte> MinersShares = new();
+        public static Dictionary<string, byte[]> MinersShares = new();
+        public static Dictionary<string, ulong> MinerTimestamps = new();
 
+        public static void DatabaseSync()
+        {
+            while (Database.DatabaseHost.Length > 5)
+            {
+                if(ShareHeight != Blockchain.CurrentHeight)
+                {
+                    if(ShareHeight > 1)
+                    {
+                        SynchronisingNow = true;
+
+                        foreach(KeyValuePair<string, byte[]> Shares in MinersShares)
+                        {
+                            Thread.Sleep(100);
+                                    
+                            Database.Add("shares", "Address, BlockHeight, Difficulty, ValidShares, StaleShares, InvalidShares", "'" + Shares.Key + "', '" + (ShareHeight + 1) + "', '" + CustomDifficulty + "', '" + Shares.Value[0] + "', '" + Shares.Value[1] + "', '" + Shares.Value[2] + "'");
+                        }
+                        MinersShares.Clear();
+
+                        SynchronisingNow = false;
+                    }
+                    ShareHeight = Blockchain.CurrentHeight;
+                }
+                        
+                Thread.Sleep(1000);
+            }
+        }
+        
         public static void ConnectionLoop()
         {
             Thread.Sleep(1000);
@@ -114,23 +142,50 @@ namespace OneCoin
         
         public static bool ProcessShare(Block Share, string Miner)
         {
+            if(!MinerTimestamps.ContainsKey(Miner))
+            {
+                MinerTimestamps.Add(Miner, 1);
+            }
+            if(!MinersShares.ContainsKey(Miner))
+            {
+                MinersShares.Add(Miner, new byte[] { 0, 0, 0 });
+            }
+            
             bool ShareCorrect = Share.CheckBlockCorrect(-1, CustomDifficulty);
             if(Share.Transactions[0].To != PoolWallet) { ShareCorrect = false; }
-
-            if(ShareCorrect)
+            if(Share.Timestamp <= MinerTimestamps[Miner]) { ShareCorrect = false; }
+            
+            while(SynchronisingNow)
             {
-                while(SynchronisingNow)
+                Thread.Sleep(100);
+            }
+            if(Wallets.CheckAddressCorrect(Miner))
+            {
+                if(ShareCorrect)
                 {
-                    Thread.Sleep(100);
+                    MinerTimestamps[Miner] = Share.Timestamp;
+                    
+                    if(Share.BlockHeight > Blockchain.CurrentHeight)
+                    {
+                        if(MinersShares[Miner][0] < 255)
+                        {
+                            MinersShares[Miner][0]++;
+                        }
+                    }
+                    else
+                    {
+                        if(MinersShares[Miner][1] < 255)
+                        {
+                            MinersShares[Miner][1]++;
+                        }
+                    }
                 }
-                
-                if(!MinersShares.ContainsKey(Miner))
+                else
                 {
-                    MinersShares.Add(Miner, 0);
-                }
-                if(MinersShares[Miner] < 255)
-                {
-                    MinersShares[Miner]++;
+                    if(MinersShares[Miner][2] < 255)
+                    {
+                        MinersShares[Miner][2]++;
+                    }
                 }
             }
             

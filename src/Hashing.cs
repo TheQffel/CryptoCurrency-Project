@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Org.BouncyCastle.Crypto.Digests;
@@ -170,6 +171,32 @@ namespace OneCoin
             Regex RegexCheck = new(RegexFormula);
 
             return RegexCheck.IsMatch(Text) && Text.Length >= Min && Text.Length <= Max;
+        }
+        
+        public static string CalculateBigNumbers(string NumberA, string NumberB, char Operator)
+        {
+            if(NumberA.Contains('-')) { NumberA = CalculateBigNumbers(NumberA[..NumberA.IndexOf('-')], NumberA[(NumberA.IndexOf('-')+1)..], '-'); }
+            if(NumberA.Contains('+')) { NumberA = CalculateBigNumbers(NumberA[..NumberA.IndexOf('+')], NumberA[(NumberA.IndexOf('+')+1)..], '+'); }
+            if(NumberA.Contains('/')) { NumberA = CalculateBigNumbers(NumberA[..NumberA.IndexOf('/')], NumberA[(NumberA.IndexOf('/')+1)..], '/'); }
+            if(NumberA.Contains('*')) { NumberA = CalculateBigNumbers(NumberA[..NumberA.IndexOf('*')], NumberA[(NumberA.IndexOf('*')+1)..], '*'); }
+            
+            if(NumberB.Contains('-')) { NumberB = CalculateBigNumbers(NumberB[..NumberB.IndexOf('-')], NumberB[(NumberB.IndexOf('-')+1)..], '-'); }
+            if(NumberB.Contains('+')) { NumberB = CalculateBigNumbers(NumberB[..NumberB.IndexOf('+')], NumberB[(NumberB.IndexOf('+')+1)..], '+'); }
+            if(NumberB.Contains('/')) { NumberB = CalculateBigNumbers(NumberB[..NumberB.IndexOf('/')], NumberB[(NumberB.IndexOf('/')+1)..], '/'); }
+            if(NumberB.Contains('*')) { NumberB = CalculateBigNumbers(NumberB[..NumberB.IndexOf('*')], NumberB[(NumberB.IndexOf('*')+1)..], '*'); }
+            
+            BigInteger A = BigInteger.Parse(NumberA);
+            BigInteger B = BigInteger.Parse(NumberB);
+            BigInteger C = BigInteger.Zero;
+
+            switch (Operator)
+            {
+                case '*': { C = A * B; break; }
+                case '/': { C = A / B; break; }
+                case '+': { C = A + B; break; }
+                case '-': { C = A - B; break; }
+            }
+            return C.ToString();
         }
     }
 }

@@ -56,22 +56,10 @@ namespace OneCoin
             if(File.Exists(Settings.AppPath + "/version.txt"))
             {
                 RunningVersion = File.ReadAllText(Settings.AppPath + "/version.txt");
-            }
-            
-            if(Directory.Exists(Settings.BlockchainPath))
-            {
-                string[] Files = Directory.GetFiles(Settings.BlockchainPath);
-
-                for (int i = 0; i < Files.Length; i++)
+                
+                if(RunningVersion.Length > 9 || RunningVersion.Split('.').Length != 3)
                 {
-                    string FilePath = "00000000" + Path.GetFileName(Files[i].Replace(".dat",  ""));
-                    string BlockFilePath = Settings.BlockchainPath + "/" + short.Parse(FilePath[^9..^6]) + "M/" + short.Parse(FilePath[^6..^3]) + "K/";
-                    string TransactionsFilePath = Settings.TransactionsPath + "/" + short.Parse(FilePath[^9..^6]) + "M/" + short.Parse(FilePath[^6..^3]) + "K/";
-                    if(!Directory.Exists(BlockFilePath)) { Directory.CreateDirectory(BlockFilePath); }
-                    if(!Directory.Exists(TransactionsFilePath)) { Directory.CreateDirectory(TransactionsFilePath); }
-                    File.Move(Settings.BlockchainPath + "/" + Path.GetFileName(Files[i]), BlockFilePath + Path.GetFileName(Files[i]));
-                    File.Move(Settings.TransactionsPath + "/" + Path.GetFileName(Files[i]), TransactionsFilePath + Path.GetFileName(Files[i]));
-                    Thread.Sleep(1);
+                    RunningVersion = "1.0.0";
                 }
             }
 
@@ -104,6 +92,7 @@ namespace OneCoin
                             Console.WriteLine("-testnode:[ipaddress]:(port)");
                             Console.WriteLine("-sendpacket:[ipaddress]:[message1]:(message2):(message3)...");
                             Console.WriteLine("-runaspool:[privatekey]:[difficulty]");
+                            Console.WriteLine("-calculator:[expression]");
                             Console.WriteLine("  Info:");
                             Console.WriteLine("Words in [] are required parameters.");
                             Console.WriteLine("Words in () are optional parameters.");
@@ -127,7 +116,7 @@ namespace OneCoin
                         }
                         case "forceupdate":
                         {
-                            File.WriteAllText("version.txt", "0\nStarted with -forceupdate!");
+                            RunningVersion = "0.1.0";
                             CheckUpdates = true;
                             break;
                         }
@@ -258,7 +247,7 @@ namespace OneCoin
                                 Database.DatabasePass = Arguments[3];
                                 Database.DatabaseDb = Arguments[4];
                                 
-                                Task.Run(() => Database.DatabaseSync());
+                                Task.Run(() => Database.ConnectionLoop());
                             }
                             else
                             {
@@ -277,7 +266,7 @@ namespace OneCoin
                                     CheckForUpdates();
                                 }
                                 
-                                Database.StorePoolData = true;
+                                Task.Run(() => Pool.DatabaseSync());
                                 Console.WriteLine("Starting pool, please wait...");
                                 Task.Run(() => Network.ListenForConnections());
                                 Task.Run(() => Network.ListenForPackets());
@@ -333,14 +322,14 @@ namespace OneCoin
                         {
                             if (Arguments.Length > 1)
                             {
-                                Blockchain.TempAvatarsPath = Arguments[1];
+                                Wallets.TempAvatarsPath = Arguments[1];
                                 
                                 if (Arguments.Length > 2)
                                 {
-                                    Blockchain.TempQrCodesPath = Arguments[2];
+                                    Wallets.TempQrCodesPath = Arguments[2];
                                 }
                             }
-                            Database.StoreUsersData = true;
+                            Task.Run(() => Wallets.DatabaseSync());
                             break;
                         }
                         case "storeblocks":
@@ -349,7 +338,7 @@ namespace OneCoin
                             {
                                 Blockchain.TempBlocksPath = Arguments[1];
                             }
-                            Database.StoreBlocksData = true;
+                            Task.Run(() => Blockchain.DatabaseSync());
                             break;
                         }
                         case "generatesignature":
@@ -481,8 +470,21 @@ namespace OneCoin
                                 DebugLogging = true;
                                 UdpClient Node = new();
                                 Node.Connect(IPAddress.Parse(Arguments[1]), 10101);
-                                Task.Run(() => Network.Send(null, Node, Arguments.Skip(2).ToArray()));
+                                Network.Send(null, Node, Arguments.Skip(2).ToArray());
                                 Thread.Sleep(1000);
+                            }
+                            else
+                            {
+                                Console.WriteLine("To few arguments, use \"OneCoin -help\", to get all possible commands with arguments...");
+                            }
+                            break;
+                        }
+                        case "calculator":
+                        {
+                            MainMenuLoop = false;
+                            if (Arguments.Length > 1)
+                            {
+                                Console.Write(Hashing.CalculateBigNumbers(Arguments[1], "0", '+'));
                             }
                             else
                             {
@@ -591,7 +593,7 @@ namespace OneCoin
                 
                 if(!File.Exists(Settings.AppPath + "/version.txt"))
                 {
-                    File.WriteAllText(Settings.AppPath + "/version.txt", "Unknown\nVersion cannot be determined!\nUpdate is recommended...");
+                    RunningVersion = "0.0.1";
                 }
                 
                 WebClient WebClient = new WebClient();
@@ -858,6 +860,14 @@ namespace OneCoin
                     if(Hashing.CheckStringFormat(Address[0], 4, 88, 88))
                     {
                         Mining.MiningAddress = Address[0];
+                        Console.Write("Mining pool address: (type 0 to mine solo): ");
+                        string[] PoolAddress = (Console.ReadLine() + ":10101").Split(':');
+                        if(PoolAddress[0].Length > 5)
+                        {
+                            Pool.PoolAddress = PoolAddress[0];
+                            Pool.PoolPort = int.Parse(PoolAddress[1]);
+                            Task.Run(() => Pool.ConnectionLoop());
+                        }
                         Mining.Menu();
                     }
                     else

@@ -272,8 +272,7 @@ namespace OneCoin
         {
             try
             { 
-                string LatestNodes = new WebClient().DownloadString("http://one-coin.org/verifiednodes.txt").Replace("<br>", "\n");
-                //string LatestNodes = new WebClient().DownloadString("http://one-coin.org/nodes/").Replace("<br>", "\n");
+                string LatestNodes = new WebClient().DownloadString("http://one-coin.org/nodes/").Replace("<br>", "\n");
                 File.WriteAllText(Settings.AppPath + "/nodes.txt", LatestNodes);
             }
             catch (Exception Ex)
@@ -420,7 +419,7 @@ namespace OneCoin
                     {
                         if (Messages[1].ToLower() == "list")
                         {
-                            Task.Run(() => Send(TcpClient, UdpClient, new [] { "Nodes", "Response" }.Concat(ConnectedNodesAddresses()).ToArray() ));
+                            Send(TcpClient, UdpClient, new [] { "Nodes", "Response" }.Concat(ConnectedNodesAddresses()).ToArray() );
                         }
                         if (Messages[1].ToLower() == "response")
                         {
@@ -483,7 +482,7 @@ namespace OneCoin
                                         BlockData[14 + i * 7] = OldBlock.Transactions[i].Message;
                                         BlockData[15 + i * 7] = OldBlock.Transactions[i].Signature;
                                     }
-                                    Task.Run(() => Send(TcpClient, UdpClient, BlockData));
+                                    Send(TcpClient, UdpClient, BlockData);
                                 }
                             }
                         }
@@ -562,7 +561,7 @@ namespace OneCoin
                                         
                                         if(Missing > 0)
                                         {
-                                            Task.Run(() => Send(TcpClient,  UdpClient, new[] { "Block", "Get", Missing.ToString() }));
+                                            Send(TcpClient,  UdpClient, new[] { "Block", "Get", Missing.ToString() });
                                         }
                                         else
                                         {
@@ -611,11 +610,7 @@ namespace OneCoin
                 {
                     if (Messages.Length > 7)
                     {
-                        bool A = Messages[2].Length != 88 && Blockchain.CurrentHeight < 1000; // Unlock nicknames/avatars at 1k
-                        bool B = Messages[2].Length == 88 && Blockchain.CurrentHeight < 10000; // Unlock transactions at 10k
-                        bool C = Messages[4] != "0" && Blockchain.CurrentHeight < 100000; // No fee for transactions to 100k
-                        
-                        if(!A && !B && !C)
+                        if(Messages[4] == "0" || Blockchain.CurrentHeight > 100000)
                         {
                             Transaction Transaction = new();
                             Transaction.From = Messages[1];
@@ -663,7 +658,7 @@ namespace OneCoin
                         {
                             if (Messages[2].ToLower() == "get")
                             {
-                                Task.Run(() => Send(TcpClient, UdpClient, new[] { "Account", "Info", "Set", Wallets.GetBalance(Messages[3]).ToString(), Wallets.GetName(Messages[3]), Wallets.GetAvatar(Messages[3])}));
+                                Send(TcpClient, UdpClient, new[] { "Account", "Info", "Set", Wallets.GetBalance(Messages[3]).ToString(), Wallets.GetName(Messages[3]), Wallets.GetAvatar(Messages[3])});
                             }
                         }
                         if (Messages[1].ToLower() == "search")
@@ -672,22 +667,8 @@ namespace OneCoin
                             {
                                 if (Messages[3].ToLower() == "nickname")
                                 {
-                                    Task.Run(() => Send(TcpClient, UdpClient, new[] { "Account", "Search", "Result", "Nickname", Messages[4], Messages[5], Wallets.GetAddress(Messages[4], byte.Parse(Messages[5]))}));
+                                    Send(TcpClient, UdpClient, new[] { "Account", "Search", "Result", "Nickname", Messages[4], Messages[5], Wallets.GetAddress(Messages[4], byte.Parse(Messages[5]))});
                                 }
-                            }
-                        }
-                    }
-                    break;
-                }
-                case "service":
-                {
-                    if (Messages.Length > 3)
-                    {
-                        if (Messages[1].ToLower() == "info")
-                        {
-                            if (Messages[2].ToLower() == "get")
-                            {
-                                Task.Run(() => Send(TcpClient, UdpClient, new[] { "Service", "Info", "Set", Messages[3], Wallets.GetName(Messages[3]), Wallets.GetAvatar(Messages[3]) }));
                             }
                         }
                     }
@@ -733,7 +714,16 @@ namespace OneCoin
                                         Messages[1] = "Set";
                                         
                                         Broadcast(Messages);
+                                        
+                                        if(Mining.MonitorMining)
+                                        {
+                                            Console.WriteLine("Miner found a block, broadcasting to network...");
+                                        }
                                     }
+                                }
+                                else
+                                {
+                                    Send(TcpClient, UdpClient, new [] { "Pool", "Info", "Set", Mining.MiningAddress, Pool.CustomDifficulty.ToString(), Media.GenerateMessage(), Media.GenerateImage() });
                                 }
                             }
                         }
