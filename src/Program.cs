@@ -165,31 +165,6 @@ namespace OneCoin
                                 {
                                     CheckForUpdates();
                                 }
-                                
-                                Console.WriteLine("Starting node, please wait...");
-                                Task.Run(() => Network.ListenForConnections());
-                                Task.Run(() => Network.ListenForPackets());
-                    
-                                Console.WriteLine("Searching for verified nodes...");
-                                Network.SearchVerifiedNodes();
-                    
-                                while(Network.ConnectedNodes(true) == 0)
-                                {
-                                    Console.WriteLine("You are not connected to any nodes!");
-                                    Console.WriteLine("Make sure you have internet connection!");
-                                    Console.WriteLine("Trying again in 10 seconds...");
-                                    Thread.Sleep(10000);
-                                    Console.WriteLine("Searching for verified nodes...");
-                                    Network.SearchVerifiedNodes();
-                                }
-                    
-                                Console.WriteLine("Synchronising blocks...");
-                                Blockchain.CurrentHeight = Blockchain.LastBlockExists();
-                                Task.Run(() => Mining.MiningWatchdog());
-                                Blockchain.FixCorruptedBlocks();
-                                Blockchain.SyncBlocks();
-                                
-                                Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
 
                                 if(Arguments[1].Length != 88)
                                 {
@@ -216,6 +191,31 @@ namespace OneCoin
                                     }
                                     Task.Run(() => Pool.ConnectionLoop());
                                 }
+                                
+                                Console.WriteLine("Starting node, please wait...");
+                                Task.Run(() => Network.ListenForConnections());
+                                Task.Run(() => Network.ListenForPackets());
+                    
+                                Console.WriteLine("Searching for verified nodes...");
+                                Network.SearchVerifiedNodes();
+                    
+                                while(Network.ConnectedNodes(true) == 0)
+                                {
+                                    Console.WriteLine("You are not connected to any nodes!");
+                                    Console.WriteLine("Make sure you have internet connection!");
+                                    Console.WriteLine("Trying again in 10 seconds...");
+                                    Thread.Sleep(10000);
+                                    Console.WriteLine("Searching for verified nodes...");
+                                    Network.SearchVerifiedNodes();
+                                }
+                    
+                                Console.WriteLine("Synchronising blocks...");
+                                Blockchain.CurrentHeight = Blockchain.LastBlockExists();
+                                Task.Run(() => Mining.MiningWatchdog());
+                                Blockchain.FixCorruptedBlocks();
+                                Blockchain.SyncBlocks();
+                                
+                                Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
                                 
                                 Settings.Load();
                                 Discord.StartService();
@@ -266,6 +266,12 @@ namespace OneCoin
                                     CheckForUpdates();
                                 }
                                 
+                                Pool.PoolKey = Arguments[1];
+                                Mining.MiningAddress = Account.GetPublicKeyFromPrivateKey(Pool.PoolKey);
+                                Mining.MiningAddress = Wallets.AddressToShort(Mining.MiningAddress);
+                                Pool.CustomDifficulty = byte.Parse(Arguments[2]);
+                                Pool.PoolWallet = Mining.MiningAddress;
+                                
                                 Task.Run(() => Pool.DatabaseSync());
                                 Console.WriteLine("Starting pool, please wait...");
                                 Task.Run(() => Network.ListenForConnections());
@@ -292,12 +298,6 @@ namespace OneCoin
                                 
                                 Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
 
-                                Pool.PoolKey = Arguments[1];
-                                Mining.MiningAddress = Account.GetPublicKeyFromPrivateKey(Pool.PoolKey);
-                                Mining.MiningAddress = Wallets.AddressToShort(Mining.MiningAddress);
-                                Pool.CustomDifficulty = byte.Parse(Arguments[2]);
-                                Pool.PoolWallet = Mining.MiningAddress;
-                                
                                 Settings.Load();
                                 Discord.StartService();
                                 
@@ -598,23 +598,22 @@ namespace OneCoin
                 
                 WebClient WebClient = new WebClient();
                 WebClient.Headers.Add("User-Agent", "Application");
-                string OldVersion = File.ReadAllText(Settings.AppPath + "/version.txt");
-                string NewVersion = OldVersion;
+                string LatestVersion = RunningVersion;
                 string[] VersionData = WebClient.DownloadString("http://api.github.com/repos/TheQffel/OneCoin/releases/latest").Split("\"");
                 for (int i = 0; i < VersionData.Length; i++)
                 {
                     if(VersionData[i] == "tag_name")
                     {
-                        NewVersion = VersionData[i+2];
+                        LatestVersion = VersionData[i+2];
                         break;
                     }
                 }
                
                 Console.ForegroundColor = ConsoleColor.DarkYellow;
-                Console.WriteLine("Your version is: " + OldVersion);
-                Console.WriteLine("Latest version is: " + NewVersion);
+                Console.WriteLine("Your version is: " + RunningVersion);
+                Console.WriteLine("Latest version is: " + LatestVersion);
 
-                if(OldVersion == NewVersion)
+                if(LatestVersion == RunningVersion)
                 {
                     Console.ForegroundColor = ConsoleColor.DarkGreen;
                     Console.WriteLine("Your app is up to date!");
@@ -644,7 +643,7 @@ namespace OneCoin
                     {
                         File.Move(Settings.UpdatePath + Path.GetFileName(AppFiles[i]), Settings.AppPath + Path.GetFileName(AppFiles[i]));
                     }
-                    File.WriteAllText(Settings.AppPath + "/version.txt", NewVersion);
+                    File.WriteAllText(Settings.AppPath + "/version.txt", LatestVersion);
                     Console.WriteLine("Update done, new version will be launched next time you run this app!");
                     
                     if(!OperatingSystem.IsWindows() && File.Exists(Settings.AppPath + "/OneCoin"))

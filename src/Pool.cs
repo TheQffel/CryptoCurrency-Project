@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Text;
 using System.Threading;
 
@@ -26,6 +27,8 @@ namespace OneCoin
 
         public static void DatabaseSync()
         {
+            while(Blockchain.SyncMode || Blockchain.TryAgain) { Thread.Sleep(1000); }
+            
             while (Database.DatabaseHost.Length > 5)
             {
                 if(ShareHeight != Blockchain.CurrentHeight)
@@ -45,8 +48,89 @@ namespace OneCoin
                         SynchronisingNow = false;
                     }
                     ShareHeight = Blockchain.CurrentHeight;
-                }
+                    
+                    Thread.Sleep(1000);
+                    
+                    string LastShareHeight = Database.Get("shares", "BlockHeight", "", "BlockHeight", "", 1)[0][0];
+                    if(LastShareHeight.Length < 4) { LastShareHeight = "999"; }
+                    
+                    string[] MinedBlock = Database.Get("transactions", "BlockHeight, Amount", "AddressTo = '" + PoolWallet + "' AND BlockHeight BETWEEN '" + LastShareHeight + "' AND '" + (ShareHeight-1000) + "'", "BlockHeight", "", 1)[0];
+                    if(uint.TryParse(MinedBlock[0], out uint MinedBlockHeight))
+                    {
+                        uint TotalShares = 0;
+                        string[][] Shares = Database.Get("shares", "Address, SUM(ValidShares)", "BlockHeight <= '" + MinedBlockHeight + "'", "", "Address");
                         
+                        for (int i = 0; i < Shares.Length; i++)
+                        {
+                            TotalShares += uint.Parse(Shares[i][1]);
+                        }
+                        string RewardPerShare = Hashing.CalculateBigNumbers(MinedBlock[1], TotalShares.ToString(), '/');
+                        
+                        if(Program.DebugLogging)
+                        {
+                            Console.WriteLine("Payout for block " + MinedBlockHeight + ": " + RewardPerShare + " Ones / Share - Total Shares: " + TotalShares);
+                        }
+
+                        for (int i = 0; i < Shares.Length; i++)
+                        {
+                            if(Database.Get("onecoin", "Address", "Address = '" + Shares[i][0] + "'")[0][0].Length < 9)
+                            {
+                                Database.Add("onecoin", "Address, Balance", "'" + Shares[i][0] + "', '0'");
+                            }
+                            string PoolBalance = Database.Get("onecoin", "Pool_Balance", "Address = '" + Shares[i][0] + "'")[0][0];
+                            if(PoolBalance.Length < 1) { PoolBalance = "0"; }
+                            Shares[i][1] = Hashing.CalculateBigNumbers(Hashing.CalculateBigNumbers(Shares[i][1], RewardPerShare, '*'), PoolBalance, '+');
+                        }
+                        
+                        Database.Del("shares", "BlockHeight <= '" + MinedBlockHeight + "'");
+
+                        for (int i = 0; i < Shares.Length; i++)
+                        {
+                            Database.Set("onecoin", "Pool_Balance = '" + Shares[i][1] + "'", "Address = '" + Shares[i][0] + "'");
+                        }
+                    }
+                    
+                    Thread.Sleep(1000);
+                
+                    string[] PendingTransaction = Database.Get("payouts", "AddressTo, Amount", "Timestamp < 9 AND AddressTo = Signature", "", "", 1)[0];
+            
+                    if(PendingTransaction.Length > 1)
+                    {
+                        if(BigInteger.TryParse(PendingTransaction[1], out BigInteger Amount))
+                        {
+                            Transaction Transaction = new();
+                            Transaction.From = PoolWallet;
+                            Transaction.To = PendingTransaction[0];
+                            Transaction.Amount = Amount;
+                            Transaction.Fee = 0;
+                            Transaction.Timestamp = (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
+                            Transaction.GenerateSignature(PoolKey);
+                            
+                            string BalanceText = Database.Get("onecoin", "Pool_Balance", "Address = '" + Transaction.To + "'")[0][0];
+                            if(BigInteger.TryParse(BalanceText, out BigInteger Balance))
+                            {
+                                if(Balance < Amount || Amount < 1000000000000000000)
+                                {
+                                    Database.Del("payouts", "Signature = '" + Transaction.To + "'");
+                                }
+                                else
+                                {
+                                    Database.Set("onecoin", "Pool_Balance = '" + (Balance - Amount) + "'", "Address = '" + Transaction.To + "'");
+
+                                    Database.Set("payouts", "AddressFrom = '" + Transaction.From + "', AddressTo = '" + Transaction.To + "', Amount = '" + Transaction.Amount + "', Fee = '" + Transaction.Fee + "', Timestamp = '" + Transaction.Timestamp + "', Signature = '" + Transaction.Signature + "'", "Signature = '" + Transaction.To + "'");
+                                    
+                                    Network.Broadcast(new[] { "Transaction", Transaction.From, Transaction.To, Transaction.Amount.ToString(), Transaction.Fee.ToString(), Transaction.Timestamp.ToString(), Transaction.Message, Transaction.Signature });
+                                    
+                                    if(Program.DebugLogging)
+                                    {
+                                        Console.WriteLine("Payout for user " + Transaction.To + ": " + Transaction.Amount + " Ones");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 Thread.Sleep(1000);
             }
         }
@@ -96,6 +180,7 @@ namespace OneCoin
                         Console.WriteLine("Trying to reconnect in few minutes.");
                     }
                     Thread.Sleep(100000);
+                    PoolNode = null;
                 }
             }
         }

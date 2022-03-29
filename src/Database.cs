@@ -84,7 +84,7 @@ namespace OneCoin
             }
         }
         
-        public static string[][] Get(string Table, string Column = "*", string When = "", string Order = "", byte Limit = 0)
+        public static string[][] Get(string Table, string Column = "*", string When = "", string Order = "", string Group = "", byte Limit = 0)
         {
             DataTable Result = new();
             
@@ -101,6 +101,10 @@ namespace OneCoin
                     if (Order != "")
                     {
                         Command.CommandText += " ORDER BY " + Order;
+                    }
+                    if (Group != "")
+                    {
+                        Command.CommandText += " GROUP BY " + Group;
                     }
                     if (Limit > 0)
                     {

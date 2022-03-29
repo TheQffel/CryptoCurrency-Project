@@ -18,7 +18,7 @@ namespace OneCoin
         public static string[] AddressEncoding = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", " ", "|" };
         public static ulong[] MinerRewards = { 423539247696576513, 288230376151711744, 144115188075855872, 72057594037927936, 36028797018963968, 18014398509481984, 9007199254740992, 4503599627370496, 2251799813685248, 1125899906842624, 562949953421312, 281474976710656, 140737488355328, 70368744177664, 35184372088832, 17592186044416, 8796093022208, 4398046511104, 2199023255552, 1099511627776, 549755813888, 274877906944, 137438953472, 68719476736, 34359738368, 17179869184, 8589934592, 4294967296, 2147483648, 1073741824, 536870912, 268435456, 134217728, 67108864, 33554432, 16777216, 8388608, 4194304, 2097152, 1048576, 524288, 262144, 131072, 65536, 32768, 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0, 0, 0, 0 };
         
-        public static uint LastCacheHeight = 0;
+        public static uint LastCacheHeight = 1;
         public static bool CacheUpdateInProgress = false;
         
         public static Dictionary<string, KeyValuePair<string, uint>> NicknameCache = new();
@@ -30,7 +30,7 @@ namespace OneCoin
         
         public static void DatabaseSync()
         {
-            while(Blockchain.SyncMode) { Thread.Sleep(1000); }
+            while(Blockchain.SyncMode || Blockchain.TryAgain) { Thread.Sleep(1000); }
             
             AddressToUpdate = new();
             
@@ -92,19 +92,19 @@ namespace OneCoin
             {
                 CacheUpdateInProgress = true;
 
-                for (uint i = LastCacheHeight; i < Blockchain.CurrentHeight - 10; i++)
+                for (; LastCacheHeight < Blockchain.CurrentHeight; LastCacheHeight++)
                 {
-                    Block OneCoinBlock = Blockchain.GetBlock(i);
+                    Block OneCoinBlock = Blockchain.GetBlock(LastCacheHeight);
 
                     for (int j = 1; j < OneCoinBlock.Transactions.Length; j++)
                     {
                         if(OneCoinBlock.Transactions[j].To.Length < 50)
                         {
-                            NicknameCache[OneCoinBlock.Transactions[j].From] = new KeyValuePair<string, uint>(OneCoinBlock.Transactions[j].To, i);
+                            NicknameCache[OneCoinBlock.Transactions[j].From] = new KeyValuePair<string, uint>(OneCoinBlock.Transactions[j].To, LastCacheHeight);
                         }
                         if(OneCoinBlock.Transactions[j].To.Length > 100)
                         {
-                            AvatarsCache[OneCoinBlock.Transactions[j].From] = new KeyValuePair<string, uint>(OneCoinBlock.Transactions[j].To, i);
+                            AvatarsCache[OneCoinBlock.Transactions[j].From] = new KeyValuePair<string, uint>(OneCoinBlock.Transactions[j].To, LastCacheHeight);
                         }
                     }
                 }

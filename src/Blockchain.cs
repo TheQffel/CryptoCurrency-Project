@@ -29,9 +29,9 @@ namespace OneCoin
 
         public static void DatabaseSync()
         {
-            while(SyncMode) { Thread.Sleep(1000); }
+            while(SyncMode || TryAgain) { Thread.Sleep(1000); }
             
-            string Tmp = Database.Get("blocks", "BlockHeight", "", "BlockHeight DESC", 1)[0][0];
+            string Tmp = Database.Get("blocks", "BlockHeight", "", "BlockHeight DESC", "", 1)[0][0];
             if(Tmp.Length < 1)
             {
                 Tmp = "0";
@@ -47,61 +47,64 @@ namespace OneCoin
                     
                     Block ToInsert = GetBlock(DbHeight);
                     
-                    string Hash = Database.Get("blocks", "CurrentHash", "BlockHeight='" + (DbHeight - 1) + "'")[0][0];
-                    
-                    if(Hash == ToInsert.PreviousHash)
+                    if(ToInsert.CheckBlockCorrect())
                     {
-                        if(Program.DebugLogging)
-                        {
-                            Console.WriteLine("Adding block and transactions to database: " + DbHeight);
-                        }
+                        string Hash = Database.Get("blocks", "CurrentHash", "BlockHeight='" + (DbHeight - 1) + "'")[0][0];
                         
-                        Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash, Timestamp, Difficulty, Message, Image, ExtraData", "'" + ToInsert.BlockHeight + "', '" + ToInsert.PreviousHash + "', '" + ToInsert.CurrentHash + "', '" + ToInsert.Timestamp + "', '" + ToInsert.Difficulty + "', '" + ToInsert.ExtraData.Split('|')[1] + "', '" + ToInsert.ExtraData.Split('|')[0] + "', '" + ToInsert.ExtraData.Split('|')[2] + "'");
-                        
-                        if(TempBlocksPath.Length > 1)
+                        if(Hash == ToInsert.PreviousHash)
                         {
-                            Media.TextToImage(ToInsert.ExtraData.Split('|')[0]).Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
-                        }
-
-                        for (int j = 0; j < ToInsert.Transactions.Length; j++)
-                        {
-                            Thread.Sleep(100);
-                        
-                            Database.Add("transactions", "BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature", "'" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Timestamp + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "'");
-                            
-                            if(Wallets.AddressToUpdate != null)
+                            if(Program.DebugLogging)
                             {
-                                if(ToInsert.Transactions[j].From.Length == 88)
-                                {
-                                    if(!Wallets.AddressToUpdate.Contains(ToInsert.Transactions[j].From))
-                                    {
-                                        Wallets.AddressToUpdate.Add(ToInsert.Transactions[j].From);
-                                    }
-                                }
+                                Console.WriteLine("Adding block and transactions to database: " + DbHeight);
+                            }
+                            
+                            Database.Add("blocks", "BlockHeight, PreviousHash, CurrentHash, Timestamp, Difficulty, Message, Image, ExtraData", "'" + ToInsert.BlockHeight + "', '" + ToInsert.PreviousHash + "', '" + ToInsert.CurrentHash + "', '" + ToInsert.Timestamp + "', '" + ToInsert.Difficulty + "', '" + ToInsert.ExtraData.Split('|')[1] + "', '" + ToInsert.ExtraData.Split('|')[0] + "', '" + ToInsert.ExtraData.Split('|')[2] + "'");
+                            
+                            if(TempBlocksPath.Length > 1)
+                            {
+                                Media.TextToImage(ToInsert.ExtraData.Split('|')[0]).Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
+                            }
+
+                            for (int j = 0; j < ToInsert.Transactions.Length; j++)
+                            {
+                                Thread.Sleep(100);
+                            
+                                Database.Add("transactions", "BlockHeight, AddressFrom, AddressTo, Amount, Fee, Timestamp, Message, Signature", "'" + ToInsert.BlockHeight + "', '" + ToInsert.Transactions[j].From + "', '" + ToInsert.Transactions[j].To + "', '" + ToInsert.Transactions[j].Amount + "', '" + ToInsert.Transactions[j].Fee + "', '" + ToInsert.Transactions[j].Timestamp + "', '" + ToInsert.Transactions[j].Message + "', '" + ToInsert.Transactions[j].Signature + "'");
                                 
-                                if(ToInsert.Transactions[j].To.Length == 88)
+                                if(Wallets.AddressToUpdate != null)
                                 {
-                                    if(!Wallets.AddressToUpdate.Contains(ToInsert.Transactions[j].To))
+                                    if(ToInsert.Transactions[j].From.Length == 88)
                                     {
-                                        Wallets.AddressToUpdate.Add(ToInsert.Transactions[j].To);
+                                        if(!Wallets.AddressToUpdate.Contains(ToInsert.Transactions[j].From))
+                                        {
+                                            Wallets.AddressToUpdate.Add(ToInsert.Transactions[j].From);
+                                        }
+                                    }
+                                    
+                                    if(ToInsert.Transactions[j].To.Length == 88)
+                                    {
+                                        if(!Wallets.AddressToUpdate.Contains(ToInsert.Transactions[j].To))
+                                        {
+                                            Wallets.AddressToUpdate.Add(ToInsert.Transactions[j].To);
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    else
-                    {
-                        DbHeight--;
-                        
-                        if(Program.DebugLogging)
+                        else
                         {
-                            Console.WriteLine("Removing previous block with wrong hash: " + DbHeight);
+                            DbHeight--;
+                            
+                            if(Program.DebugLogging)
+                            {
+                                Console.WriteLine("Removing previous block with wrong hash: " + DbHeight);
+                            }
+                            
+                            Database.Del("blocks", "BlockHeight='" + DbHeight + "'");
+                            Database.Del("transactions", "BlockHeight='" + DbHeight + "'");
+                            
+                            DbHeight--;
                         }
-                        
-                        Database.Del("blocks", "BlockHeight='" + DbHeight + "'");
-                        Database.Del("transactions", "BlockHeight='" + DbHeight + "'");
-                        
-                        DbHeight--;
                     }
                 }
                 
