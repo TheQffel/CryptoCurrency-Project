@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -28,7 +29,7 @@ namespace OneCoin
 
             Console.BackgroundColor = ConsoleColor.Black;
             Console.ForegroundColor = ConsoleColor.White;
-
+            
             try
             {
                 new Bitmap(256, 256).Dispose();
@@ -79,7 +80,10 @@ namespace OneCoin
                             Console.WriteLine("-debug");
                             Console.WriteLine("-skipupdate");
                             Console.WriteLine("-forceupdate");
+                            Console.WriteLine("-nobootstrap");
+                            Console.WriteLine("-resetchain");
                             Console.WriteLine("-syncspeed:[speed]");
+                            Console.WriteLine("-blockchaintofile:[archivedir]");
                             Console.WriteLine("-mining:[address]:(threads):(pooladdress):(poolport)");
                             Console.WriteLine("-database:[host]:[user]:[pass]:[db]");
                             Console.WriteLine("-storeusers:(avatarsdir):(qrcodesdir)");
@@ -118,6 +122,35 @@ namespace OneCoin
                         {
                             RunningVersion = "0.1.0";
                             CheckUpdates = true;
+                            break;
+                        }
+                        case "nobootstrap":
+                        {
+                            Blockchain.NoBootStrap = true;
+                            break;
+                        }
+                        case "blockchaintofile":
+                        {
+                            if (Arguments.Length > 1)
+                            {
+                                Task.Run(() => Blockchain.ArchiveBlocks(Arguments[1]));
+                            }
+                            else
+                            {
+                                Console.WriteLine("To few arguments, use \"OneCoin -help\", to get all possible commands with arguments...");
+                            }
+                            break;
+                        }
+                        case "resetchain":
+                        {
+                            if(Directory.Exists(Settings.BlockchainPath))
+                            {
+                                Directory.Delete(Settings.BlockchainPath, true);
+                            }
+                            if(Directory.Exists(Settings.TransactionsPath))
+                            {
+                                Directory.Delete(Settings.TransactionsPath, true);
+                            }
                             break;
                         }
                         case "syncspeed":
@@ -165,12 +198,7 @@ namespace OneCoin
                                 {
                                     CheckForUpdates();
                                 }
-
-                                if(Arguments[1].Length != 88)
-                                {
-                                    string[] Nickname = (Arguments[1].Replace('#', '|') + "|1").Split("|");
-                                    Arguments[1] = Wallets.GetAddress(Nickname[0], byte.Parse(Nickname[1]));
-                                }
+                                
                                 Mining.MiningAddress = Arguments[1];
                                 
                                 if (Arguments.Length > 2)
@@ -214,6 +242,12 @@ namespace OneCoin
                                 Task.Run(() => Mining.MiningWatchdog());
                                 Blockchain.FixCorruptedBlocks();
                                 Blockchain.SyncBlocks();
+                                
+                                if(Mining.MiningAddress.Length != 88)
+                                {
+                                    string[] Nickname = (Mining.MiningAddress.Replace('#', '|') + "|1").Split("|");
+                                    Mining.MiningAddress = Wallets.GetAddress(Nickname[0], byte.Parse(Nickname[1]));
+                                }
                                 
                                 Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
                                 
@@ -524,8 +558,8 @@ namespace OneCoin
                     {
                         Console.WriteLine("You are not connected to any nodes!");
                         Console.WriteLine("Make sure you have internet connection!");
-                        Console.WriteLine("Then press any key to try again...");
-                        Console.ReadKey();
+                        Console.WriteLine("Trying again in 10 seconds...");
+                        Thread.Sleep(10000);
                         Console.WriteLine("Searching for verified nodes...");
                         Network.SearchVerifiedNodes();
                     }
@@ -624,8 +658,20 @@ namespace OneCoin
                     Console.WriteLine("New version available!");
                     
                     Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine("Downloading update...");
-                    WebClient.DownloadFile("http://github.com/TheQffel/OneCoin/releases/latest/download/" + ReleaseName, Settings.AppPath + "/Update.zip");
+                    Console.Write("Downloading update...");
+                    
+                    int DownloadPercent = 0;
+                    bool DownloadDone = false;
+                    WebClient.DownloadFileCompleted += (Sender, Args) => { DownloadDone = true; };
+                    WebClient.DownloadProgressChanged += (Sender, Args) => { DownloadPercent = Args.ProgressPercentage; };
+                    WebClient.DownloadFileAsync(new Uri("http://github.com/TheQffel/OneCoin/releases/latest/download/" + ReleaseName), Settings.AppPath + "/Update.zip");
+                    while (!DownloadDone)
+                    {
+                        Thread.Sleep(100);
+                        Console.CursorLeft = 0;
+                        Console.Write("Downloading update: " + DownloadPercent + "%");
+                    }
+                    Console.WriteLine();
                     Console.WriteLine("Extracting update...");
                     ZipFile.ExtractToDirectory(Settings.AppPath + "/Update.zip", Settings.UpdatePath, true);
                     for (int i = 0; i < AppFiles.Length; i++)

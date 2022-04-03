@@ -573,7 +573,8 @@ namespace OneCoin
                     case ConsoleKey.F:
                     {
                         Console.WriteLine("Verifying blocks, please wait...");
-                        Task.Run(() => Blockchain.FixCorruptedBlocks());
+                        Blockchain.FixCorruptedBlocks();
+                        Console.WriteLine("All blocks verified.");
                         break;
                     }
                     case ConsoleKey.G:

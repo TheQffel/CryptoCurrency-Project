@@ -2,9 +2,13 @@
 using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace OneCoin
 {
@@ -14,6 +18,7 @@ namespace OneCoin
         public static bool SyncMode = true;
         public static bool TryAgain = false;
         public static short SyncSpeed = 100;
+        public static bool NoBootStrap = false;
         
         static Dictionary<uint, Block> BlocksInMemory = new();
         static readonly object FileSystemRead = new();
@@ -112,6 +117,56 @@ namespace OneCoin
             }
         }
         
+        public static void ArchiveBlocks(string ArchivePath)
+        {
+            if(File.Exists(ArchivePath + "/BlockchainTemp.zip"))
+            {
+                File.Delete(ArchivePath + "/BlockchainTemp.zip");
+            }
+            
+            if(!File.Exists(ArchivePath + "/Blockchain.zip"))
+            {
+                File.Create(ArchivePath + "/Blockchain.zip");
+            }
+            
+            while (true)
+            {
+                Thread.Sleep(10000000);
+                
+                List<string> AllFiles = new();
+                string[] DirectoriesM = Directory.GetDirectories(Settings.BlockchainPath);
+                DirectoriesM = DirectoriesM.OrderBy(p => p.Length).ThenBy(r => r).ToArray();
+                for (int i = 0; i < DirectoriesM.Length; i++)
+                {
+                    string[] DirectoriesK = Directory.GetDirectories(DirectoriesM[i]);
+                    DirectoriesK = DirectoriesK.OrderBy(p => p.Length).ThenBy(r => r).ToArray();
+                    DirectoriesM[i] = Path.GetFileName(DirectoriesM[i]);
+                    for (int j = 0; j < DirectoriesK.Length; j++)
+                    {
+                        string[] Files = Directory.GetFiles(DirectoriesK[j]);
+                        Files = Files.OrderBy(p => p.Length).ThenBy(r => r).ToArray();
+                        DirectoriesK[j] = Path.GetFileName(DirectoriesK[j]);
+                        for (int k = 0; k < Files.Length; k++)
+                        {
+                            AllFiles.Add("/" + DirectoriesM[i] + "/" + DirectoriesK[j] + "/" + Path.GetFileName(Files[k]));
+                        }
+                    }
+                }
+                    
+                ZipArchive Archive = ZipFile.Open(ArchivePath + "/BlockchainTemp.zip", ZipArchiveMode.Create);
+
+                for (int i = 0; i < AllFiles.Count - 1000; i++)
+                {
+                    Archive.CreateEntryFromFile(Settings.BlockchainPath + AllFiles[i], "blockchain" + AllFiles[i], CompressionLevel.Optimal);
+                    Archive.CreateEntryFromFile(Settings.TransactionsPath + AllFiles[i], "transactions" + AllFiles[i], CompressionLevel.Optimal);
+                }
+                Archive.Dispose();
+                
+                File.Delete(ArchivePath + "/Blockchain.zip");
+                File.Move(ArchivePath + "/BlockchainTemp.zip", ArchivePath + "/Blockchain.zip");
+            }
+        }
+        
         public static void FixCorruptedBlocks()
         {
             bool DeleteNow = false;
@@ -159,17 +214,48 @@ namespace OneCoin
         
         public static void SyncBlocks()
         {
+            if(CurrentHeight == 0 && !NoBootStrap)
+            {
+                string FileName = Settings.AppPath + "/Blockchain.zip";
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                Console.WriteLine("It looks like you are synchronising from genesis block.");
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine("Bootstap will be downloaded to speed up synchronisation.");
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Downloading genesis blocks...");
+                WebClient WebClient = new();
+                
+                int DownloadPercent = 0;
+                bool DownloadDone = false;
+                WebClient.DownloadFileCompleted += (Sender, Args) => { DownloadDone = true; };
+                WebClient.DownloadProgressChanged += (Sender, Args) => { DownloadPercent = Args.ProgressPercentage; };
+                WebClient.DownloadFileAsync(new Uri("http://one-coin.org/blockchain.zip"), FileName);
+                while (!DownloadDone)
+                {
+                    Thread.Sleep(100);
+                    Console.CursorLeft = 0;
+                    Console.Write("Downloading genesis blocks: " + DownloadPercent + "%");
+                }
+                Console.WriteLine();
+                Console.WriteLine("Extracting downloaded blockchain...");
+                ZipFile.ExtractToDirectory(FileName, Settings.AppPath, true);
+                File.Move(FileName, FileName + ".backup");
+                Console.WriteLine("Checking if all blocks are correct...");
+                CurrentHeight = LastBlockExists();
+                FixCorruptedBlocks();
+            }
+            
             SyncMode = true;
             byte Timeout = 0;
-            
             bool[] Nodes = new bool[256];
-            bool FirstRun = CurrentHeight < 10;
             
             Console.ForegroundColor = ConsoleColor.DarkRed;
             Console.WriteLine("You are not synced at height: " + CurrentHeight);
-            
             Console.ForegroundColor = ConsoleColor.DarkCyan;
             Thread.Sleep(1000);
+            
+            double StartBlock = CurrentHeight - 1;
+            double StartTime = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
             
             for (uint i = CurrentHeight + 1; i < uint.MaxValue; i++)
             {
@@ -198,12 +284,15 @@ namespace OneCoin
                 }
                 Timeout = 0;
                 
-                if(i % 1000 == 0)
-                {
-                    Console.WriteLine("Current synchronisation height: " + i);
-                }
+                Console.CursorLeft = 0;
+                Console.Write("Current synchronisation height: " + i);
             }
             
+            double StopBlock = CurrentHeight + 1;
+            double StopTime = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
+            
+            Console.CursorLeft = 0;
+            Console.WriteLine("Average speed: " + Math.Round((StopBlock-StartBlock)/(StopTime-StartTime), 2) + " blocks per second.");
             Console.ForegroundColor = ConsoleColor.DarkGreen;
             Console.WriteLine("You are now synced to height: " + CurrentHeight);
             
@@ -220,15 +309,6 @@ namespace OneCoin
                 DelBlock(CurrentHeight);
                 TryAgain = false;
                 SyncBlocks();
-            }
-            
-            if(FirstRun)
-            {
-                Console.ForegroundColor = ConsoleColor.DarkCyan;
-                Console.WriteLine("It looks like you are using this app first time.");
-                Console.WriteLine("Check if you are synchronised to right height.");
-                Console.WriteLine("Press any key to continue...");
-                Console.ReadKey();
             }
             
             Console.ForegroundColor = ConsoleColor.White;

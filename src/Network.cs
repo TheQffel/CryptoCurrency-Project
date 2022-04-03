@@ -272,7 +272,7 @@ namespace OneCoin
         {
             try
             { 
-                string LatestNodes = new WebClient().DownloadString("http://one-coin.org/nodes/").Replace("<br>", "\n");
+                string LatestNodes = new WebClient().DownloadString("http://one-coin.org/nodes/");
                 File.WriteAllText(Settings.AppPath + "/nodes.txt", LatestNodes);
             }
             catch (Exception Ex)
@@ -280,8 +280,8 @@ namespace OneCoin
                 if(Program.DebugLogging) { Console.WriteLine("Cannot refresh nodes list, using local file."); }
             }
             
-            string[] Nodes = File.ReadAllLines(Settings.AppPath + "/nodes.txt");
             Random Random = new Random();
+            string[] Nodes = File.ReadAllLines(Settings.AppPath + "/nodes.txt").Skip(1).ToArray();
             Nodes = Nodes.OrderBy(x => Random.Next()).ToArray();
             
             for (int i = 0; i < Nodes.Length; i++)
@@ -706,24 +706,27 @@ namespace OneCoin
                                     PoolBlock.Transactions[i].Signature = Messages[15 + i * 7];
                                 }
                                 
-                                if(Pool.ProcessShare(PoolBlock, Miner))
+                                if(Wallets.CheckAddressCorrect(Miner))
                                 {
-                                    if(PoolBlock.CheckBlockCorrect())
+                                    if(Pool.ProcessShare(PoolBlock, Miner))
                                     {
-                                        Messages[0] = "Block";
-                                        Messages[1] = "Set";
-                                        
-                                        Broadcast(Messages);
-                                        
-                                        if(Mining.MonitorMining)
+                                        if(PoolBlock.CheckBlockCorrect())
                                         {
-                                            Console.WriteLine("Miner found a block, broadcasting to network...");
+                                            Messages[0] = "Block";
+                                            Messages[1] = "Set";
+                                            
+                                            Broadcast(Messages);
+                                            
+                                            if(Mining.MonitorMining)
+                                            {
+                                                Console.WriteLine("Miner found a block, broadcasting to network...");
+                                            }
                                         }
                                     }
-                                }
-                                else
-                                {
-                                    Send(TcpClient, UdpClient, new [] { "Pool", "Info", "Set", Mining.MiningAddress, Pool.CustomDifficulty.ToString(), Media.GenerateMessage(), Media.GenerateImage() });
+                                    else
+                                    {
+                                        Send(TcpClient, UdpClient, new [] { "Pool", "Info", "Set", Mining.MiningAddress, Pool.CustomDifficulty.ToString(), Media.GenerateMessage(), Media.GenerateImage() });
+                                    }
                                 }
                             }
                         }
