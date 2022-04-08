@@ -496,6 +496,19 @@ namespace OneCoin
                             }
                             break;
                         }
+                        case "testallnodes":
+                        {
+                            MainMenuLoop = false;
+                            Network.SearchVerifiedNodes();
+                            Console.WriteLine("Nodes test result (Node Ip Address : Port - Message):");
+                            Thread.Sleep(10000);
+                            Network.MessageTestMode = true;
+                            Network.Broadcast(new [] {"Block", "Get", "X"});
+                            Thread.Sleep(100000);
+                            Network.FlushConnections();
+                            Thread.Sleep(10000);
+                            break;
+                        }
                         case "sendpacket":
                         {
                             MainMenuLoop = false;

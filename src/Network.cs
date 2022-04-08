@@ -15,6 +15,7 @@ namespace OneCoin
     {
         public static TcpClient[] Peers = new TcpClient[256];
         public static bool[] IsListening = new bool[256];
+        public static bool MessageTestMode = false;
 
         public static Dictionary<long, bool> NodesTransmission = new();
 
@@ -192,7 +193,14 @@ namespace OneCoin
                     }
                     else
                     {
-                        Action(Client, null, Encoding.UTF8.GetString(Buffer, 0, ByteIndex).Split("~"));
+                        if(MessageTestMode)
+                        {
+                            Console.WriteLine((Peer + new string(' ', 21 - Peer.Length) + "  -  " + Encoding.UTF8.GetString(Buffer, 0, ByteIndex).Replace('~', ' '))[..(Console.WindowWidth-4)] + "...");
+                        }
+                        else
+                        {
+                            Action(Client, null, Encoding.UTF8.GetString(Buffer, 0, ByteIndex).Split("~"));
+                        }
                         ByteIndex = 0;
                     }
                 }
@@ -514,7 +522,7 @@ namespace OneCoin
                                 
                                 while(NewBlock.Timestamp > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
                                 {
-                                    Thread.Sleep(100);
+                                    Thread.Sleep(10);
                                 }
                                 
                                 if(Blockchain.SyncMode)
@@ -623,7 +631,7 @@ namespace OneCoin
                             
                             while(Transaction.Timestamp > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
                             {
-                                Thread.Sleep(1);
+                                Thread.Sleep(10);
                             }
 
                             lock (Mining.PendingTransactions)

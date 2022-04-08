@@ -179,7 +179,20 @@ namespace OneCoin
                 {
                     if(BlockExists(i))
                     {
-                        if(!GetBlock(i).CheckBlockCorrect())
+                        Block ToCheck = GetBlock(i);
+                        Block Previous = GetBlock(i-1);
+                        bool BlockCorrect;
+                        
+                        if(i + 10000 < TempHeight)
+                        {
+                            BlockCorrect = ToCheck.PreviousHash == Previous.CurrentHash;
+                        }
+                        else
+                        {
+                            BlockCorrect = ToCheck.CheckBlockCorrect();
+                        }
+                        
+                        if(!BlockCorrect)
                         {
                             TempHeight = i - 1;
                             DeleteNow = true;
@@ -229,7 +242,7 @@ namespace OneCoin
                 bool DownloadDone = false;
                 WebClient.DownloadFileCompleted += (Sender, Args) => { DownloadDone = true; };
                 WebClient.DownloadProgressChanged += (Sender, Args) => { DownloadPercent = Args.ProgressPercentage; };
-                WebClient.DownloadFileAsync(new Uri("http://one-coin.org/blockchain.zip"), FileName);
+                WebClient.DownloadFileAsync(new Uri("http://one-coin.org/Blockchain.zip"), FileName);
                 while (!DownloadDone)
                 {
                     Thread.Sleep(100);
@@ -323,13 +336,13 @@ namespace OneCoin
             
             if(Highest > CurrentHeight)
             {
-                for (uint i = Highest; i + 250 > Highest && i != 0; i--)
+                for (uint i = Highest; i > 0; i--)
                 {
-                    if(NodesChain[NodeId].ContainsKey(i))
+                    if(NodesChain[NodeId].ContainsKey(i-1))
                     {
-                        if(NodesChain[NodeId].ContainsKey(i+1))
+                        if(NodesChain[NodeId].ContainsKey(i))
                         {
-                            if(NodesChain[NodeId][i+1].PreviousHash != NodesChain[NodeId][i].CurrentHash)
+                            if(NodesChain[NodeId][i].PreviousHash != NodesChain[NodeId][i-1].CurrentHash)
                             {
                                 Result = Highest;
                                 NodesChain[NodeId] = new Dictionary<uint, Block>();
@@ -339,15 +352,15 @@ namespace OneCoin
                             }
                         }
                         
-                        if(BlockExists(i))
+                        if(BlockExists(i-1))
                         {
-                            if(NodesChain[NodeId][i].CurrentHash == GetBlock(i).CurrentHash && NodesChain[NodeId][i].PreviousHash == GetBlock(i).PreviousHash)
+                            if(NodesChain[NodeId][i-1].CurrentHash == GetBlock(i-1).CurrentHash && NodesChain[NodeId][i-1].PreviousHash == GetBlock(i-1).PreviousHash)
                             {
                                 lock(WholeBlockchain)
                                 {
                                     bool AllCorrect = true;
                                     
-                                    for (uint j = i; j <= Highest; j++)
+                                    for (uint j = i - 1; j <= Highest; j++)
                                     {
                                         if(!GetBlock(j, NodeId).CheckBlockCorrect(NodeId))
                                         {
@@ -357,7 +370,7 @@ namespace OneCoin
                                     
                                     if(AllCorrect)
                                     {
-                                        for (uint j = i; j <= Highest; j++)
+                                        for (uint j = i - 1; j <= Highest; j++)
                                         {
                                             if(BlockExists(j))
                                             {
@@ -374,18 +387,29 @@ namespace OneCoin
                     }
                     else
                     {
-                        Result = i;
+                        Result = i-1;
                         break;
                     }
                 }
-                
-                while(Lowest + 250 < CurrentHeight && BlockExists(Lowest))
+            }
+
+            for (uint i = NodesMin[NodeId] + 10; i < NodesMax[NodeId] && CurrentHeight > i; i++)
+            {
+                if(NodesChain[NodeId].ContainsKey(i))
                 {
-                    if(NodesChain[NodeId].ContainsKey(Lowest))
+                    if(NodesChain[NodeId][i].CurrentHash == GetBlock(i).CurrentHash && NodesChain[NodeId][i].PreviousHash == GetBlock(i).PreviousHash)
                     {
-                        NodesChain[NodeId].Remove(Lowest);
+                        NodesChain[NodeId].Remove(i-5);
+                        NodesMin[NodeId]++;
                     }
-                    Lowest++;
+                    else
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    NodesMin[NodeId]++;
                 }
             }
             
