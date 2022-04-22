@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace OneCoin
 {
@@ -13,6 +12,7 @@ namespace OneCoin
         public static bool PauseMining = false;
         public static string MiningAddress = "";
         public static bool MonitorMining = false;
+        public static ulong BlockMiningTimeout = 1000000;
         public static byte ThreadsCount = (byte)Environment.ProcessorCount;
 
         public static List<Transaction> PendingTransactions = new();
@@ -95,12 +95,23 @@ namespace OneCoin
                         
                         KeepMining = false;
                         Thread.Sleep(500);
+                        Timeout = 1;
+                        
+                        if(MonitorMining)
+                        { 
+                            Console.WriteLine("Verifying blocks, please wait...");
+                        }
+                        
                         Blockchain.FixCorruptedBlocks();
+                        
+                        if(MonitorMining)
+                        { 
+                            Console.WriteLine("All blocks verified.");
+                        }
+                        
                         PrepareToMining(Blockchain.GetBlock(Blockchain.CurrentHeight));
                         Thread.Sleep(500);
                         StartOrStop(ThreadsCount);
-                        
-                        Timeout = 1;
                     }
                     
                     Statistics.Update();
@@ -131,8 +142,10 @@ namespace OneCoin
 
             if (Program.DebugLogging) { Console.WriteLine("Preparing to mine: " + (CurrentBlock.BlockHeight + 1)); }
             
+            BlockMiningTimeout = (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
+            
             byte NextDifficulty = CurrentBlock.Difficulty;
-            ulong TimestampDifferences = 5;;
+            ulong TimestampDifferences = 5;
             bool CanBeChanged = true;
 
             for (uint i = 0; i < 10; i++)
@@ -165,6 +178,7 @@ namespace OneCoin
                     ToBeMined[i] = new();
                     ToBeMined[i].BlockHeight = NewBlockHeight;
                     ToBeMined[i].PreviousHash = CurrentBlock.CurrentHash;
+                    ToBeMined[i].Timestamp = BlockMiningTimeout;
                     ToBeMined[i].Difficulty = NextDifficulty;
                 }
                 MinerReward.From = "OneCoin";
@@ -191,6 +205,8 @@ namespace OneCoin
             
             if(Pool.PoolMessage.Length > 1) { MessageData = Pool.PoolMessage; }
             if(Pool.PoolImage.Length > 1) { ImageData = Pool.PoolImage; }
+            
+            BlockMiningTimeout += 1000;
             
             if (Program.DebugLogging) { Console.WriteLine("Block difficulty: " + NextDifficulty); }
 
@@ -303,7 +319,7 @@ namespace OneCoin
                 
                 Random Random = new();
                 string Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 abcdefghijklmnopqrstuvwxyz";
-                
+
                 if(MonitorMining)
                 {
                     Console.WriteLine("Thread " + (Index + 1) + " started!");
@@ -311,7 +327,7 @@ namespace OneCoin
                 
                 while (KeepMining)
                 {
-                    if (PauseMining || Blockchain.BlockExists(ToBeMined[Index].BlockHeight))
+                    if (PauseMining || Blockchain.BlockExists(ToBeMined[Index].BlockHeight) || BlockMiningTimeout < ToBeMined[Index].Timestamp)
                     {
                         Thread.Sleep(100);
                     }

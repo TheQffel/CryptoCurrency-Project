@@ -437,7 +437,7 @@ namespace OneCoin
                             for (int i = 0; i < Nodes.Length; i++)
                             {
                                 Task.Run(() => Discover(Nodes[i].Split(":")[0]));
-                                Thread.Sleep(100);
+                                Thread.Sleep(1000);
                             }
                         }
                         if (Messages[1].ToLower() == "restart")
@@ -618,38 +618,35 @@ namespace OneCoin
                 {
                     if (Messages.Length > 7)
                     {
-                        if(Messages[4] == "0" || Blockchain.CurrentHeight > 100000)
+                        Transaction Transaction = new();
+                        Transaction.From = Messages[1];
+                        Transaction.To = Messages[2];
+                        Transaction.Amount = BigInteger.Parse(Messages[3]);
+                        Transaction.Fee = ulong.Parse(Messages[4]);
+                        Transaction.Timestamp = ulong.Parse(Messages[5]);
+                        Transaction.Message = Messages[6];
+                        Transaction.Signature = Messages[7];
+                        
+                        while(Transaction.Timestamp > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
                         {
-                            Transaction Transaction = new();
-                            Transaction.From = Messages[1];
-                            Transaction.To = Messages[2];
-                            Transaction.Amount = ulong.Parse(Messages[3]);
-                            Transaction.Fee = ulong.Parse(Messages[4]);
-                            Transaction.Timestamp = ulong.Parse(Messages[5]);
-                            Transaction.Message = Messages[6];
-                            Transaction.Signature = Messages[7];
-                            
-                            while(Transaction.Timestamp > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
-                            {
-                                Thread.Sleep(10);
-                            }
+                            Thread.Sleep(10);
+                        }
 
-                            lock (Mining.PendingTransactions)
+                        lock (Mining.PendingTransactions)
+                        {
+                            if(Transaction.Timestamp + 500000 > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
                             {
-                                if(Transaction.Timestamp + 500000 > (ulong)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds())
+                                if(!Mining.PendingTransactions.Exists(Pending => Pending.Signature == Transaction.Signature))
                                 {
-                                    if(!Mining.PendingTransactions.Exists(Pending => Pending.Signature == Transaction.Signature))
+                                    if(Transaction.CheckTransactionCorrect(Wallets.GetBalance(Transaction.From), Blockchain.CurrentHeight))
                                     {
-                                        if(Transaction.CheckTransactionCorrect(Wallets.GetBalance(Transaction.From), Blockchain.CurrentHeight))
+                                        if(!Wallets.CheckTransactionAlreadyIncluded(Transaction))
                                         {
-                                            if(!Wallets.CheckTransactionAlreadyIncluded(Transaction))
-                                            {
-                                                Mining.PendingTransactions.Add(Transaction);
-                                                Mining.PendingTransactions.Sort((x, y) => x.Timestamp.CompareTo(y.Timestamp));
-                                                Mining.UpdateTransactions();
-                                                
-                                                Broadcast(Messages/*, TcpClient*/);  // #TOBEREMOVED#
-                                            }
+                                            Mining.PendingTransactions.Add(Transaction);
+                                            Mining.PendingTransactions.Sort((x, y) => x.Timestamp.CompareTo(y.Timestamp));
+                                            Mining.UpdateTransactions();
+                                            
+                                            Broadcast(Messages/*, TcpClient*/);  // #TOBEREMOVED#
                                         }
                                     }
                                 }

@@ -71,12 +71,17 @@ namespace OneCoin
                     
                     if(TempAvatarsPath.Length > 1 && Temp[3].Length > 9)
                     {
-                        Media.TextToImage(Temp[3]).Save(TempAvatarsPath + "/" + AddressToUpdate[i] + ".png", ImageFormat.Png);
+                        Bitmap UserImage = Media.TextToImage(Temp[3]);
+                        UserImage.Save(TempAvatarsPath + "/" + AddressToUpdate[i] + ".png", ImageFormat.Png);
+                        UserImage.Dispose();
                     }
                     if(TempQrCodesPath.Length > 1)
                     {
-                        Bitmap QrCode = GenerateQrCode(AddressToUpdate[i]);
-                        new Bitmap(QrCode, QrCode.Width*4, QrCode.Height*4).Save(TempQrCodesPath + "/" + AddressToUpdate[i] + ".png", ImageFormat.Png);
+                        Bitmap QrCodeSmall = GenerateQrCode(AddressToUpdate[i]);
+                        Bitmap QrCodeBig = new Bitmap(QrCodeSmall, QrCodeSmall.Width*4, QrCodeSmall.Height*4);
+                        QrCodeBig.Save(TempQrCodesPath + "/" + AddressToUpdate[i] + ".png", ImageFormat.Png);
+                        QrCodeSmall.Dispose();
+                        QrCodeBig.Dispose();
                     }
                 }
             

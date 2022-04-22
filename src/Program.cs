@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -193,12 +192,6 @@ namespace OneCoin
                             MainMenuLoop = false;
                             if (Arguments.Length > 1)
                             {
-                                Settings.CheckPaths();
-                                if (CheckUpdates)
-                                {
-                                    CheckForUpdates();
-                                }
-                                
                                 Mining.MiningAddress = Arguments[1];
                                 
                                 if (Arguments.Length > 2)
@@ -217,54 +210,28 @@ namespace OneCoin
                                     {
                                         Pool.PoolPort = int.Parse(Arguments[4]);
                                     }
+                                }
+
+                                StartOrStopNode(true);
+                                
+                                if(Pool.PoolAddress.Length > 5)
+                                {
                                     Task.Run(() => Pool.ConnectionLoop());
                                 }
-                                
-                                Console.WriteLine("Starting node, please wait...");
-                                Task.Run(() => Network.ListenForConnections());
-                                Task.Run(() => Network.ListenForPackets());
-                    
-                                Console.WriteLine("Searching for verified nodes...");
-                                Network.SearchVerifiedNodes();
-                    
-                                while(Network.ConnectedNodes(true) == 0)
-                                {
-                                    Console.WriteLine("You are not connected to any nodes!");
-                                    Console.WriteLine("Make sure you have internet connection!");
-                                    Console.WriteLine("Trying again in 10 seconds...");
-                                    Thread.Sleep(10000);
-                                    Console.WriteLine("Searching for verified nodes...");
-                                    Network.SearchVerifiedNodes();
-                                }
-                    
-                                Console.WriteLine("Synchronising blocks...");
-                                Blockchain.CurrentHeight = Blockchain.LastBlockExists();
-                                Task.Run(() => Mining.MiningWatchdog());
-                                Blockchain.FixCorruptedBlocks();
-                                Blockchain.SyncBlocks();
                                 
                                 if(Mining.MiningAddress.Length != 88)
                                 {
                                     string[] Nickname = (Mining.MiningAddress.Replace('#', '|') + "|1").Split("|");
                                     Mining.MiningAddress = Wallets.GetAddress(Nickname[0], byte.Parse(Nickname[1]));
                                 }
-                                
-                                Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
-                                
-                                Settings.Load();
-                                Discord.StartService();
-                                
+
                                 WelcomeScreen();
                                 Mining.StartOrStop(Mining.ThreadsCount);
                                 Mining.Menu();
                                 Mining.KeepMining = false;
                                 Console.WriteLine("Thank you for using One Coin! Hope to see you soon :)");
                                 
-                                Discord.StopService();
-                                Settings.Save();
-                                
-                                Task.Run(() => Network.FlushConnections());
-                                Database.DatabaseHost = "";
+                                StartOrStopNode(false);
                             }
                             else
                             {
@@ -294,57 +261,21 @@ namespace OneCoin
                             MainMenuLoop = false;
                             if (Arguments.Length > 2)
                             {
-                                Settings.CheckPaths();
-                                if (CheckUpdates)
-                                {
-                                    CheckForUpdates();
-                                }
-                                
                                 Pool.PoolKey = Arguments[1];
                                 Mining.MiningAddress = Account.GetPublicKeyFromPrivateKey(Pool.PoolKey);
                                 Mining.MiningAddress = Wallets.AddressToShort(Mining.MiningAddress);
                                 Pool.CustomDifficulty = byte.Parse(Arguments[2]);
                                 Pool.PoolWallet = Mining.MiningAddress;
                                 
+                                StartOrStopNode(true);
                                 Task.Run(() => Pool.DatabaseSync());
-                                Console.WriteLine("Starting pool, please wait...");
-                                Task.Run(() => Network.ListenForConnections());
-                                Task.Run(() => Network.ListenForPackets());
-                    
-                                Console.WriteLine("Searching for verified nodes...");
-                                Network.SearchVerifiedNodes();
-                    
-                                while(Network.ConnectedNodes(true) == 0)
-                                {
-                                    Console.WriteLine("You are not connected to any nodes!");
-                                    Console.WriteLine("Make sure you have internet connection!");
-                                    Console.WriteLine("Trying again in 10 seconds...");
-                                    Thread.Sleep(10000);
-                                    Console.WriteLine("Searching for verified nodes...");
-                                    Network.SearchVerifiedNodes();
-                                }
-                    
-                                Console.WriteLine("Synchronising blocks...");
-                                Blockchain.CurrentHeight = Blockchain.LastBlockExists();
-                                Task.Run(() => Mining.MiningWatchdog());
-                                Blockchain.FixCorruptedBlocks();
-                                Blockchain.SyncBlocks();
-                                
-                                Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
 
-                                Settings.Load();
-                                Discord.StartService();
-                                
                                 WelcomeScreen();
                                 Mining.Menu();
                                 Mining.KeepMining = false;
                                 Console.WriteLine("Thank you for using One Coin! Hope to see you soon :)");
                                 
-                                Discord.StopService();
-                                Settings.Save();
-                                
-                                Task.Run(() => Network.FlushConnections());
-                                Database.DatabaseHost = "";
+                                StartOrStopNode(false);
                             }
                             else
                             {
@@ -552,52 +483,9 @@ namespace OneCoin
             {
                 if(!Console.IsOutputRedirected) // Prevent "double-click" in linux gui instead of launching from terminal.
                 {
-                    Console.Clear();
-                    Settings.CheckPaths();
-                    
-                    if (CheckUpdates)
-                    {
-                        CheckForUpdates();
-                    }
-                    
-                    Console.WriteLine("Starting node, please wait...");
-                    Task.Run(() => Network.ListenForConnections());
-                    Task.Run(() => Network.ListenForPackets());
-                    
-                    Console.WriteLine("Searching for verified nodes...");
-                    Network.SearchVerifiedNodes();
-                    
-                    while(Network.ConnectedNodes(true) == 0)
-                    {
-                        Console.WriteLine("You are not connected to any nodes!");
-                        Console.WriteLine("Make sure you have internet connection!");
-                        Console.WriteLine("Trying again in 10 seconds...");
-                        Thread.Sleep(10000);
-                        Console.WriteLine("Searching for verified nodes...");
-                        Network.SearchVerifiedNodes();
-                    }
-                    
-                    Console.WriteLine("Synchronising blocks...");
-                    Blockchain.CurrentHeight = Blockchain.LastBlockExists();
-                    Task.Run(() => Mining.MiningWatchdog());
-                    Blockchain.FixCorruptedBlocks();
-                    Blockchain.SyncBlocks();
-                    
-                    Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
-
-                    Settings.Load();
-                    Discord.StartService();
+                    StartOrStopNode(true);
                     MainMenu();
-                    Discord.StopService();
-                    Settings.Save();
-                    Task.Run(() => Network.FlushConnections());
-                    Database.DatabaseHost = "";
-                    
-                    if (CheckUpdates)
-                    {
-                        CheckForUpdates();
-                    }
-                    Thread.Sleep(5000);
+                    StartOrStopNode(false);
                 }
                 else
                 {
@@ -610,6 +498,65 @@ namespace OneCoin
 
             Console.BackgroundColor = Back;
             Console.ForegroundColor = Front;
+        }
+        
+        static void StartOrStopNode(bool State)
+        {
+            if(State)
+            {
+                Console.Clear();
+                Settings.CheckPaths();
+                    
+                if (CheckUpdates)
+                {
+                    CheckForUpdates();
+                }
+                    
+                Console.WriteLine("Starting node, please wait...");
+                Task.Run(() => Network.ListenForConnections());
+                Task.Run(() => Network.ListenForPackets());
+                    
+                Console.WriteLine("Searching for verified nodes...");
+                Network.SearchVerifiedNodes();
+                
+                Thread.Sleep(5000);
+                    
+                while(Network.ConnectedNodes(true) == 0)
+                {
+                    Console.WriteLine("You are not connected to any nodes!");
+                    Console.WriteLine("Make sure you have internet connection!");
+                    Console.WriteLine("Trying again in 10 seconds...");
+                    Thread.Sleep(10000);
+                    Console.WriteLine("Searching for verified nodes...");
+                    Network.SearchVerifiedNodes();
+                }
+                    
+                Console.WriteLine("Synchronising blocks...");
+                Blockchain.CurrentHeight = Blockchain.LastBlockExists();
+                Task.Run(() => Mining.MiningWatchdog());
+                Blockchain.FixCorruptedBlocks();
+                Blockchain.SyncBlocks();
+                    
+                Task.Run(() => new WebClient().DownloadString("http://one-coin.org/nodes/?version=" + RunningVersion));
+
+                Settings.Load();
+                Discord.StartService();
+            }
+            else
+            {
+                Discord.StopService();
+                Settings.Save();
+                
+                Task.Run(() => Network.FlushConnections());
+                Database.DatabaseHost = "";
+                    
+                if (CheckUpdates)
+                {
+                    CheckForUpdates();
+                }
+                
+                Thread.Sleep(5000);
+            }
         }
 
         static void CheckForUpdates()

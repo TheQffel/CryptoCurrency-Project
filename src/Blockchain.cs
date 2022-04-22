@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.IO.Compression;
@@ -8,7 +9,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace OneCoin
 {
@@ -67,7 +67,9 @@ namespace OneCoin
                             
                             if(TempBlocksPath.Length > 1)
                             {
-                                Media.TextToImage(ToInsert.ExtraData.Split('|')[0]).Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
+                                Bitmap BlockImage = Media.TextToImage(ToInsert.ExtraData.Split('|')[0]);
+                                BlockImage.Save(TempBlocksPath + "/" + ToInsert.BlockHeight + ".png", ImageFormat.Png);
+                                BlockImage.Dispose();
                             }
 
                             for (int j = 0; j < ToInsert.Transactions.Length; j++)
